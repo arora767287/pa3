@@ -100,7 +100,7 @@ int main(int argc, char** argv) {
         C[i] = 0;
     }
 
-    double start_time, end_time;
+    double start_time;
     if (rank == 0) {
         start_time = MPI_Wtime();
     }
@@ -118,9 +118,11 @@ int main(int argc, char** argv) {
         B = rec_buffer;
     }
 
+    double end_time;
     if (rank == 0) {
         end_time = MPI_Wtime();
-        cout << "Time: " << end_time - start_time << endl;
+        double time_taken = end_time - start_time;
+        cout << "Time: " <<time_taken << endl;
     }
 
     if (pf == 1) {
