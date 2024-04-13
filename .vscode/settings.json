@@ -42,7 +42,9 @@
         "typeinfo": "cpp",
         "variant": "cpp",
         "algorithm": "cpp",
-        "vector": "cpp"
+        "vector": "cpp",
+        "array": "cpp",
+        "__split_buffer": "cpp"
     },
     "C_Cpp.errorSquiggles": "enabled"
 }

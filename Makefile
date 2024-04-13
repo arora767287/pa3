@@ -1,11 +1,11 @@
 all:
-	mpicxx -o spmat spmat.cpp
+	mpicxx -o sparse sparse.cpp
 
 run:
-	mpirun -np $(np) ./spmat $(n) $(s) $(pf) $(out)
+	mpirun -np $(np) ./sparse $(n) $(s) $(pf) $(out)
 
 clean:
-	rm -f spmat
+	rm -f sparse
 
 sample:
-	mpirun -np 8 ./spmat 10000 0.001 0 spmat_out
+	mpirun -np 8 ./sparse 10000 0.001 0 sparse_out
