@@ -5,20 +5,19 @@
 #include <iostream>
 #include <fstream>
 
-//tuples are in groups of three, so just need pointer
-int * generate_sparse(int s, int N, int p){
-    int * gen_mat = new int[N*N/p];
-    int counter = 0;
-    for(int r = 0; r < N/p; r++){
-        for(int c = 0; c < N; c++){
+// using tuples of length 3 to represent sparse matrices
+std::vector<Tuple> generate_sparse(int s, int N, int p, int rank) {
+    std::vector<Tuple> gen_mat;
+    for (int r = rank * (N / p); r < (rank + 1) * (N / p); r++) {
+        for (int c = 0; c < N; c++) {
             int rand_num = rand() % N;
-            if(rand_num < (1-s)*N){
-                gen_mat[counter] = r;
-                gen_mat[counter + 1] = c;
-                gen_mat[counter + 2] = rand() % 10;
-            }   
+            if (rand_num < s * N) {
+                Tuple tup = new Tuple(t.row, t.col, rand() % 10); //row, col, value
+                gen_mat.push_back(tup);
+            }
         }
     }
     return gen_mat;
 }
+
 
