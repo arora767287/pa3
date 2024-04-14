@@ -67,56 +67,44 @@ int* vec_mat(vector<Point> matrix, int N, int p){
     return mat;
 }
 
-// void transpose_matrix(vector<Point>& matrix, int N, int p, int rank, vector<int> sendcounts, vector<int> sdispls, vector<int> recvcounts(p, 0), vector<int> rdispls(p, 0)) {
-//     vector<int> sendcounts(p, 0); //sending number per proc
-//     vector<int> sdispls(p, 0); //displacement
+void transpose_matrix(vector<Point>& matrix, int N, int p) {
+    vector<int> sendcounts(p, 0);
+    vector<int> sdispls(p, 0);
 
-//     vector<int> recvcounts(p, 0); //sending number per proc
-//     vector<int> rdispls(p, 0); //displacement
+    for (Point& point : matrix) {
+        sendcounts[point.c / (N / p)]++;
+    }
 
-//     //how much does this current processor send to each other processor?
-//     //how much is sent to each processor i.e. how much does rank 0 receive?
-//     for (Point& point : matrix) {
-//         if((point.c / (N / p)) != rank){ // just stays in place
-//             sendcounts[point.c / (N / p)]++;
-//         }
-//     }
+    sdispls[0] = 0;
+    for (int i = 1; i < p; i++) {
+        sdispls[i] = sdispls[i - 1] + sendcounts[i - 1];
+    }
 
+    vector<int> recvcounts(p, 0);
+    MPI_Alltoall(sendcounts.data(), 1, MPI_INT, recvcounts.data(), 1, MPI_INT, MPI_COMM_WORLD);
 
-//     // MPI_Allreduce(&sendcounts, recvcounts.data(), sendcounts.size(), MPI_INT, MPI_SUM, )
-//     //for every processor, iterate through the matrix and store an array of 
-//     //all processors that it is sending to and increment that joint array
+    vector<int> rdispls(p, 0);
+    rdispls[0] = 0;
+    int recv_buffer_size = recvcounts[0];
+    for (int i = 1; i < p; i++) {
+        rdispls[i] = rdispls[i - 1] + recvcounts[i - 1];
+        recv_buffer_size += recvcounts[i];
+    }
 
-//     // for (Point& point : matrix) {
-//     //     if((point.c / (N / p)) != rank){ // just stays in place
-//     //         recvcounts[point.c / (N / p)]++;
-//     //     }
-//     // }
-//     //how much does each processor send to this current processor?
-    
-//     // print_mat_int(sendcounts);
-//     // //how much is being sent out from each processor ie. how much does rank 0 send out?
-//     // for (Point& point : matrix) {
-//     //     recvcounts[point.c / (N / p)]++;
-//     // }
+    vector<Point> transposed_matrix(recv_buffer_size);
 
-//     sdispls[0] = 0;
-//     for (int i = 1; i < p; i++) {
-//         sdispls[i] = sdispls[i - 1] + sendcounts[i - 1]; //running total for displacement per proc
-//     }
+    MPI_Alltoallv(matrix.data(), sendcounts.data(), sdispls.data(), MPI_INT,
+                  transposed_matrix.data(), recvcounts.data(), rdispls.data(), MPI_INT,
+                  MPI_COMM_WORLD);
 
-//     vector<Point> transposed_matrix(matrix.size()); //storage for transposed matrix
+    for (Point& point : transposed_matrix) {
+        int temp = point.r;
+        point.r = point.c;
+        point.c = temp;
+    }
 
-//     MPI_Alltoallv(matrix.data(), sendcounts.data(), sdispls.data(), MPI_INT, transposed_matrix.data(), sendcounts.data(), sdispls.data(), MPI_INT, MPI_COMM_WORLD);
-
-//     for (Point& point: transposed_matrix) {
-//         int temp = point.r;
-//         point.r = point.c;
-//         point.c = temp; //cuz we have to transpose
-//     }
-
-//     matrix = transposed_matrix;
-// }
+    matrix = transposed_matrix;
+}
 
 void mat_mul(vector<Point>& a, vector<Point>& b, int* c, int N, int p) {
     for (Point& pb : b) {
