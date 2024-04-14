@@ -75,14 +75,6 @@ void mat_mul(vector<Point>& a, vector<Point>& b, int* c, int N, int p) {
     }
 }
 
-vector< vector<int> > create_dense_matrix(const vector<Point>& matrix, int N) {
-    vector< vector<int> > dense_matrix(N, vector<int>(N, 0));
-    for (const Point& point : matrix) {
-        dense_matrix[point.r][point.c] = point.v;
-    }
-    return dense_matrix;
-}
-
 void print_matrix_to_file(int* matrix, int N, ofstream& outfile) {
     for (int i = 0; i < N; i++) {
         for (int j = 0; j < N; j++) {
