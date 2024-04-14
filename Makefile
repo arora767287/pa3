@@ -10,4 +10,4 @@ clean:
 # sample:
 # 	mpirun -np 8 ./sparse 10000 0.001 1 sparse_out
 sample:
-	mpirun -np 8 ./sparse 24 1 1 sparse_out
+	mpirun -np 4 ./sparse 6 1 1 sparse_out

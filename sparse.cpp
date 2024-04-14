@@ -28,69 +28,11 @@ vector<Point> generate_sparse(float s, int N, int p, int rank) {
     return gen_mat;
 }
 
-void print_matrix(int* matrix, char* outfile, int dim1, int dim2){
-    FILE * fp = fopen(outfile, "w");
-    for(int i = 0; i < dim1; i++){
-        for(int j = 0; j < dim2; j++){
-            fprintf(fp, "%d ", matrix[i*dim2 + j]);
-        }
-        fprintf(fp, "\n");
-    }
-}
-
-void print_mat(vector<Point> matrix, char* outfile){
-    int all_vals = matrix.size();
-    char *filename = outfile;
-    FILE * fp = fopen(filename, "w");
-    for (int i = 0; i < all_vals; i++) {
-        fprintf(fp, "(%d, %d, %d)\n", matrix[i].r, matrix[i].c, matrix[i].v);
-    }
-}
-
-void print_mat_int(vector<int> matrix){
-    int all_vals = matrix.size();
-    char *filename = "example.txt";
-    FILE * fp = fopen(filename, "w");
-    for (int i = 0; i < all_vals; i++) {
-        fprintf(fp, "%d ", matrix[i]);
-    }
-}
-
-void print_dense_matrix(const vector<Point>& matrix, int N, int p, int rank) {
-    // Create a dense matrix initialized with zeros
-    vector< vector<int> > dense_matrix(N, vector<int>(N, 0));
-
-    // Fill the dense matrix with values from the sparse matrix
-    for (const Point& point : matrix) {
-        dense_matrix[point.r][point.c] = point.v;
-    }
-
-    // Print the dense matrix
-    for (int i = 0; i < N; i++) {
-        for (int j = 0; j < N; j++) {
-            cout << dense_matrix[i][j] << " ";
-        }
-        cout << endl;
-    }
-}
-
-int* vec_mat(vector<Point> matrix, int dim1, int dim2){
-    int* mat = new int[dim1*dim2];
-
-    for (int i = 0; i < matrix.size(); i++) {
-        int row = matrix[i].r;
-        int col = matrix[i].c;
-        mat[row*dim2 + col] += matrix[i].v;
-    }    
-    return mat;
-}
-
 void transpose_matrix(vector<Point>& matrix, int N, int p) {
     vector<int> sendcounts(p, 0);
     vector<int> sdispls(p, 0);
     vector<int> recvcounts(p, 0);
     vector<int> rdispls(p, 0);
-    // printf("running1");
     for (Point& point : matrix) {
         sendcounts[point.c / (N / p)]++;
     }
@@ -99,7 +41,6 @@ void transpose_matrix(vector<Point>& matrix, int N, int p) {
     for (int i = 1; i < p; i++) {
         sdispls[i] = sdispls[i - 1] + sendcounts[i - 1];
     }
-    // printf("running2");
     MPI_Alltoall(sendcounts.data(), 1, MPI_INT, recvcounts.data(), 1, MPI_INT, MPI_COMM_WORLD);
 
     
@@ -110,11 +51,9 @@ void transpose_matrix(vector<Point>& matrix, int N, int p) {
         recv_buffer_size += recvcounts[i];
     }
     vector<Point> transposed_matrix(recv_buffer_size);
-    // printf("running3");
     MPI_Alltoallv(matrix.data(), sendcounts.data(), sdispls.data(), MPI_INT,
                   transposed_matrix.data(), recvcounts.data(), rdispls.data(), MPI_INT,
                   MPI_COMM_WORLD);
-//    printf("running4");
     for (Point& point : transposed_matrix) {
         int temp = point.r;
         point.r = point.c;
@@ -134,6 +73,33 @@ void mat_mul(vector<Point>& a, vector<Point>& b, int* c, int N, int p) {
             }
         }
     }
+}
+
+vector< vector<int> > create_dense_matrix(const vector<Point>& matrix, int N) {
+    vector< vector<int> > dense_matrix(N, vector<int>(N, 0));
+    for (const Point& point : matrix) {
+        dense_matrix[point.r][point.c] = point.v;
+    }
+    return dense_matrix;
+}
+
+void print_matrix_to_file(int* matrix, int N, ofstream& outfile) {
+    for (int i = 0; i < N; i++) {
+        for (int j = 0; j < N; j++) {
+            outfile << matrix[i*N + j] << " ";
+        }
+        outfile << endl;
+    }
+    outfile << endl;
+}
+
+void print_matrices_to_file(int* A, int* B, int* C, int N, int p, const char* out_file) {
+
+    ofstream outfile(out_file);
+    print_matrix_to_file(A, N, outfile);
+    print_matrix_to_file(B, N, outfile);
+    print_matrix_to_file(C, N, outfile);
+    outfile.close();
 }
 
 int main(int argc, char** argv) {
@@ -156,75 +122,87 @@ int main(int argc, char** argv) {
     vector<Point> A = generate_sparse(s, N, p, rank);
     vector<Point> B = generate_sparse(s, N, p, rank);
 
-    vector<Point> global_B;
-    if (rank == 0) {
-        global_B.resize(B.size() * p);
-    }
-    MPI_Gather(B.data(), B.size(), MPI_INT, global_B.data(), B.size(), MPI_INT, 0, MPI_COMM_WORLD);
-
-    if (rank == 0) {
-        cout << "Matrix B before transpose (Dense Format):" << endl;
-        print_dense_matrix(global_B, N, p, rank);
-        cout << endl;
-    }
-
     transpose_matrix(B, N, p);
 
-    vector<Point> global_transposed_B;
-    if (rank == 0) {
-        global_transposed_B.resize(B.size() * p);
+    int C_size = N * N / p;
+    int* C = new int[C_size];
+    for (int i = 0; i < C_size; i++) {
+        C[i] = 0;
     }
-    MPI_Gather(B.data(), B.size(), MPI_INT, global_transposed_B.data(), B.size(), MPI_INT, 0, MPI_COMM_WORLD);
 
+    double start_time;
     if (rank == 0) {
-        cout << "Transposed Matrix B (Dense Format):" << endl;
-        print_dense_matrix(global_transposed_B, N, p, rank);
-        cout << endl;
+        start_time = MPI_Wtime();
     }
-    // print_mat(B, "transpose");
 
+    int src, dst;
+    MPI_Cart_shift(comm, 0, 1, &src, &dst);
 
-
-    // int C_size = N * N / p;
-    // int* C = new int[C_size];
-    // for (int i = 0; i < C_size; i++) {
-    //     C[i] = 0;
-    // }
-
-    // double start_time;
-    // if (rank == 0) {
-    //     start_time = MPI_Wtime();
-    // }
-
-
-    // int src, dst;
-    // MPI_Cart_shift(comm, 0, 1, &src, &dst);
-
-    // for (int iter = 0; iter < p; iter++) {
-    //     mat_mul(A, B, C, N, p);
+    for (int iter = 0; iter < p; iter++) {
+        mat_mul(A, B, C, N, p);
         
-    //     vector<Point> rec_buffer(B.size());
-    //     MPI_Sendrecv(B.data(), B.size(), MPI_INT, dst, 0, rec_buffer.data(), rec_buffer.size(), MPI_INT, src, 0, comm, MPI_STATUS_IGNORE);
+        vector<Point> rec_buffer(B.size());
+        MPI_Sendrecv(B.data(), B.size(), MPI_INT, dst, 0, rec_buffer.data(), rec_buffer.size(), MPI_INT, src, 0, comm, MPI_STATUS_IGNORE);
 
-    //     B = rec_buffer;
-    // }
+        B = rec_buffer;
+    }
 
-    // double end_time;
+    double end_time;
+    if (rank == 0) {
+        end_time = MPI_Wtime();
+        double time_taken = end_time - start_time;
+        cout << "Time: " << time_taken << endl;
+    }
+
+    cout << "wtf";
+    MPI_Barrier(MPI_COMM_WORLD);
+
+    int* dense_A = new int[N * N / p];
+    int* dense_B = new int[N * N / p];
+    for (const Point& point : A) {
+        dense_A[point.r * N + point.c] = point.v;
+    }
+    for (const Point& point : B) {
+        dense_B[point.r * N + point.c] = point.v;
+    }
+
+    printf("FNISIHING THIS");
+    // int* global_dense_A = nullptr;
+    // int* global_dense_B = nullptr;
+    // int* global_dense_C = nullptr;
+
     // if (rank == 0) {
-    //     end_time = MPI_Wtime();
-    //     double time_taken = end_time - start_time;
-    //     cout << "Time: " <<time_taken << endl;
+    int* global_dense_A = new int[N * N];
+    int* global_dense_B = new int[N * N];
+    int* global_dense_C = new int[N * N];
     // }
 
+    
 
-    // if (pf == 1) {
-    //     // printf("Running");
-    //     int* final_mat;
-    //     MPI_Gather(&C, N*N/p, MPI_INT, &final_mat, N*N, MPI_INT, 0, comm);
-    //     print_matrix(final_mat, out_file, N, p);
-    // }
+    printf("STARTING GATHERS");
+    MPI_Gather(dense_A, N * N / p, MPI_INT, global_dense_A, N * N / p, MPI_INT, 0, MPI_COMM_WORLD);
+    MPI_Gather(dense_B, N * N / p, MPI_INT, global_dense_B, N * N / p, MPI_INT, 0, MPI_COMM_WORLD);
+    MPI_Gather(C, N * N / p, MPI_INT, global_dense_C, N * N / p, MPI_INT, 0, comm);
+    printf("ENDING GARTHERS");
+    if (pf == 1) {
+        printf("ENTEREDF HERE");
+        int* global_C = nullptr;
+        
+        if (rank == 0) {
+            ofstream outfile(out_file);
+            print_matrices_to_file(global_dense_A, global_dense_B, global_dense_C, N, p, out_file);
+            
+        }
+        delete[] global_C;
+    }
 
-    // delete[] C;
+    delete[] dense_A;
+    delete[] dense_B;
+    delete[] C;
+    
+    delete[] global_dense_A;
+    delete[] global_dense_B;
+    delete[] global_dense_C;
 
     MPI_Finalize();
     return 0;
