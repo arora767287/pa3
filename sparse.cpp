@@ -28,11 +28,11 @@ vector<Point> generate_sparse(float s, int N, int p, int rank) {
     return gen_mat;
 }
 
-void print_matrix(int* matrix, char* outfile, int N, int p){
+void print_matrix(int* matrix, char* outfile, int dim1, int dim2){
     FILE * fp = fopen(outfile, "w");
-    for(int i = 0; i < N/p; i++){
-        for(int j = 0; j < N; j++){
-            fprintf(fp, "%d ", matrix[i*N + j]);
+    for(int i = 0; i < dim1; i++){
+        for(int j = 0; j < dim2; j++){
+            fprintf(fp, "%d ", matrix[i*dim2 + j]);
         }
         fprintf(fp, "\n");
     }
@@ -155,10 +155,8 @@ int main(int argc, char** argv) {
 
     if(rank == 0){
         int* curr_mat = vec_mat(B, N, p);
-        print_matrix(curr_mat, "original.txt", N, p);
+        print_matrix(curr_mat, "original.txt", N/p, N);
     }
-
-
 
     vector<Point> matrix = B;
     vector<int> sendcounts(p, 0); //sending number per proc
@@ -176,9 +174,6 @@ int main(int argc, char** argv) {
     for (int i = 1; i < p; i++) {
         sdispls[i] = sdispls[i - 1] + sendcounts[i - 1]; //running total for displacement per proc
     }
-    // int MPI_Alltoall(const void *sendbuf, int sendcount, MPI_Datatype sendtype,
-    //                  void *recvbuf, int recvcount, MPI_Datatype recvtype,
-    //                  MPI_Comm comm)    
 
     MPI_Alltoall(sendcounts.data(), 1, MPI_INT, recvcounts.data(), 1, MPI_INT, MPI_COMM_WORLD);
 
@@ -200,7 +195,7 @@ int main(int argc, char** argv) {
     B = transposed_matrix;
     if(rank == 0){
         int* new_mat = vec_mat(transposed_matrix, N, p);
-        print_matrix(new_mat, "transpose.txt", N, p);
+        print_matrix(new_mat, "transpose.txt", N, N/p);
     }
 
     // print_mat(B, "transpose");
