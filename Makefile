@@ -7,5 +7,7 @@ run:
 clean:
 	rm -f sparse
 
+# sample:
+# 	mpirun -np 8 ./sparse 10000 0.001 1 sparse_out
 sample:
-	mpirun -np 8 ./sparse 10000 0.001 1 sparse_out
+	mpirun -np 8 ./sparse 24 0.2 1 sparse_out

@@ -132,8 +132,6 @@ void mat_mul(vector<Point>& a, vector<Point>& b, int* c, int N, int p) {
 
 int main(int argc, char** argv) {
 
-    #include <mpi.h>
-
     MPI_Init(&argc, &argv);
     int rank, p;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
