@@ -28,6 +28,25 @@ vector<Point> generate_sparse(int s, int N, int p, int rank) {
     return gen_mat;
 }
 
+void print_matrix(vector<Point>& matrix, char* outfile){
+    int** mat;
+    FILE * fp = fopen(outfile, "w");
+    for (int i = 0; i < matrix.size(); i++) {
+        int row = matrix[i].row;
+        int col = matrix[i].col;
+        mat[row][col] += matrix[i].value;
+    }    
+
+    for(int i = 0; i < N/p; i++){
+        for(int j = 0; j < N; j++){
+            fprintf(fp, "%d", matrix[i][j]);
+        }
+        fprintf(fp, "\n");
+    }
+    
+}
+git reset --hard origin/<branch_name>
+
 void transpose_matrix(vector<Point>& matrix, int N, int p) {
     vector<int> sendcounts(p, 0); //sending number per proc
     vector<int> sdispls(p, 0); //displacement
@@ -41,7 +60,6 @@ void transpose_matrix(vector<Point>& matrix, int N, int p) {
         sdispls[i] = sdispls[i - 1] + sendcounts[i - 1]; //running total for displacement per proc
     }
 
-    #include <mpi.h> // Include the MPI header file
 
     vector<Point> transposed_matrix(matrix.size()); //storage for transposed matrix
 
