@@ -28,15 +28,8 @@ vector<Point> generate_sparse(int s, int N, int p, int rank) {
     return gen_mat;
 }
 
-void print_matrix(vector<Point>& matrix, char* outfile){
-    int** mat;
+void print_matrix(int** matrix, char* outfile){
     FILE * fp = fopen(outfile, "w");
-    for (int i = 0; i < matrix.size(); i++) {
-        int row = matrix[i].row;
-        int col = matrix[i].col;
-        mat[row][col] += matrix[i].value;
-    }    
-
     for(int i = 0; i < N/p; i++){
         for(int j = 0; j < N; j++){
             fprintf(fp, "%d", matrix[i][j]);
@@ -45,7 +38,6 @@ void print_matrix(vector<Point>& matrix, char* outfile){
     }
     
 }
-git reset --hard origin/<branch_name>
 
 void transpose_matrix(vector<Point>& matrix, int N, int p) {
     vector<int> sendcounts(p, 0); //sending number per proc
@@ -143,8 +135,11 @@ int main(int argc, char** argv) {
         cout << "Time: " <<time_taken << endl;
     }
 
+
     if (pf == 1) {
-        // ADD PRINTING CODE HERE
+        int** final_mat;
+        MPI_Gather(&C, N*N/p, MPI_INT, &final_mat, N*N, MPI_INT, 0, comm);
+        print_matrix(final_mat);
     }
 
     delete[] C;
