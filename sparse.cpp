@@ -38,9 +38,9 @@ void print_matrix(int* matrix, char* outfile, int dim1, int dim2){
     }
 }
 
-void print_mat(vector<Point> matrix){
+void print_mat(vector<Point> matrix, char* outfile){
     int all_vals = matrix.size();
-    char *filename = "example.txt";
+    char *filename = outfile;
     FILE * fp = fopen(filename, "w");
     for (int i = 0; i < all_vals; i++) {
         fprintf(fp, "(%d, %d, %d)\n", matrix[i].r, matrix[i].c, matrix[i].v);
@@ -56,13 +56,31 @@ void print_mat_int(vector<int> matrix){
     }
 }
 
-int* vec_mat(vector<Point> matrix, int N, int p){
-    int* mat = new int[N*N/p];
+void print_dense_matrix(const vector<Point>& matrix, int N, int p, int rank) {
+    // Create a dense matrix initialized with zeros
+    vector< vector<int> > dense_matrix(N, vector<int>(N, 0));
+
+    // Fill the dense matrix with values from the sparse matrix
+    for (const Point& point : matrix) {
+        dense_matrix[point.r][point.c] = point.v;
+    }
+
+    // Print the dense matrix
+    for (int i = 0; i < N; i++) {
+        for (int j = 0; j < N; j++) {
+            cout << dense_matrix[i][j] << " ";
+        }
+        cout << endl;
+    }
+}
+
+int* vec_mat(vector<Point> matrix, int dim1, int dim2){
+    int* mat = new int[dim1*dim2];
 
     for (int i = 0; i < matrix.size(); i++) {
         int row = matrix[i].r;
         int col = matrix[i].c;
-        mat[row*N + col] += matrix[i].v;
+        mat[row*dim2 + col] += matrix[i].v;
     }    
     return mat;
 }
@@ -70,7 +88,9 @@ int* vec_mat(vector<Point> matrix, int N, int p){
 void transpose_matrix(vector<Point>& matrix, int N, int p) {
     vector<int> sendcounts(p, 0);
     vector<int> sdispls(p, 0);
-
+    vector<int> recvcounts(p, 0);
+    vector<int> rdispls(p, 0);
+    // printf("running1");
     for (Point& point : matrix) {
         sendcounts[point.c / (N / p)]++;
     }
@@ -79,24 +99,22 @@ void transpose_matrix(vector<Point>& matrix, int N, int p) {
     for (int i = 1; i < p; i++) {
         sdispls[i] = sdispls[i - 1] + sendcounts[i - 1];
     }
-
-    vector<int> recvcounts(p, 0);
+    // printf("running2");
     MPI_Alltoall(sendcounts.data(), 1, MPI_INT, recvcounts.data(), 1, MPI_INT, MPI_COMM_WORLD);
 
-    vector<int> rdispls(p, 0);
+    
     rdispls[0] = 0;
     int recv_buffer_size = recvcounts[0];
     for (int i = 1; i < p; i++) {
         rdispls[i] = rdispls[i - 1] + recvcounts[i - 1];
         recv_buffer_size += recvcounts[i];
     }
-
     vector<Point> transposed_matrix(recv_buffer_size);
-
+    // printf("running3");
     MPI_Alltoallv(matrix.data(), sendcounts.data(), sdispls.data(), MPI_INT,
                   transposed_matrix.data(), recvcounts.data(), rdispls.data(), MPI_INT,
                   MPI_COMM_WORLD);
-
+//    printf("running4");
     for (Point& point : transposed_matrix) {
         int temp = point.r;
         point.r = point.c;
@@ -135,62 +153,36 @@ int main(int argc, char** argv) {
     double s = stod(argv[2]);  // sparsoty
     int pf = stoi(argv[3]);  // printing flag
     char* out_file = argv[4];  // Ofile name
-
     vector<Point> A = generate_sparse(s, N, p, rank);
     vector<Point> B = generate_sparse(s, N, p, rank);
 
-    if(rank == 0){
-        int* curr_mat = vec_mat(B, N, p);
-        print_matrix(curr_mat, "original.txt", N/p, N);
+    vector<Point> global_B;
+    if (rank == 0) {
+        global_B.resize(B.size() * p);
+    }
+    MPI_Gather(B.data(), B.size(), MPI_INT, global_B.data(), B.size(), MPI_INT, 0, MPI_COMM_WORLD);
+
+    if (rank == 0) {
+        cout << "Matrix B before transpose (Dense Format):" << endl;
+        print_dense_matrix(global_B, N, p, rank);
+        cout << endl;
     }
 
-    vector<Point> matrix = B;
-    vector<int> sendcounts(p, 0); //sending number per proc
-    vector<int> sdispls(p, 0); //displacement
+    transpose_matrix(B, N, p);
 
-    vector<int> recvcounts(p, 0); //sending number per proc
-    vector<int> rdispls(p, 0); //displacement
-
-
-    for (Point& point : matrix) {
-        sendcounts[point.c / (N / p)]++;
+    vector<Point> global_transposed_B;
+    if (rank == 0) {
+        global_transposed_B.resize(B.size() * p);
     }
+    MPI_Gather(B.data(), B.size(), MPI_INT, global_transposed_B.data(), B.size(), MPI_INT, 0, MPI_COMM_WORLD);
 
-    sdispls[0] = 0;
-    for (int i = 1; i < p; i++) {
-        sdispls[i] = sdispls[i - 1] + sendcounts[i - 1]; //running total for displacement per proc
+    if (rank == 0) {
+        cout << "Transposed Matrix B (Dense Format):" << endl;
+        print_dense_matrix(global_transposed_B, N, p, rank);
+        cout << endl;
     }
-
-    MPI_Alltoall(sendcounts.data(), 1, MPI_INT, recvcounts.data(), 1, MPI_INT, MPI_COMM_WORLD);
-
-    rdispls[0] = 0;
-    for (int i = 1; i < p; i++) {
-        rdispls[i] = rdispls[i - 1] + recvcounts[i - 1]; //running total for displacement per proc
-    }
-
-    vector<Point> transposed_matrix(matrix.size()); //storage for transposed matrix
-
-    MPI_Alltoallv(matrix.data(), sendcounts.data(), sdispls.data(), MPI_INT, transposed_matrix.data(), recvcounts.data(), rdispls.data(), MPI_INT, MPI_COMM_WORLD);
-
-    for (Point& point: transposed_matrix) {
-        int temp = point.r;
-        point.r = point.c;
-        point.c = temp; //cuz we have to transpose
-    }
-
-    B = transposed_matrix;
-    if(rank == 0){
-        int* new_mat = vec_mat(transposed_matrix, N, p);
-        print_matrix(new_mat, "transpose.txt", N, N/p);
-    }
-
     // print_mat(B, "transpose");
 
-    // transpose_matrix(B, N, p, rank);
-
-    // if(rank == 0){
-    //     print_mat(B, N, p, 0);
-    // }
 
 
     // int C_size = N * N / p;
@@ -237,5 +229,3 @@ int main(int argc, char** argv) {
     MPI_Finalize();
     return 0;
 } 
-
-
