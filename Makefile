@@ -8,4 +8,4 @@ clean:
 	rm -f sparse
 
 sample:
-	mpirun -np 8 ./sparse 10000 0.001 0 sparse_out
+	mpirun -np 8 ./sparse 10000 0.001 1 sparse_out
