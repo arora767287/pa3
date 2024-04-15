@@ -43,6 +43,32 @@ void print_matrix(int* matrix, char* outfile, int dim1, int dim2){
     }
 }
 
+void print_matrix_all(int* matrix, int* matrix2, int* matrix3, char* outfile, int dim1, int dim2){
+    FILE * fp = fopen(outfile, "w");
+    for(int i = 0; i < dim1; i++){
+        for(int j = 0; j < dim2; j++){
+            fprintf(fp, "%d ", matrix[i*dim2 + j]);
+        }
+        fprintf(fp, "\n");
+    }
+    fprintf(fp, "\n");
+    for(int i = 0; i < dim1; i++){
+        for(int j = 0; j < dim2; j++){
+            fprintf(fp, "%d ", matrix2[i*dim2 + j]);
+        }
+        fprintf(fp, "\n");
+    }
+    fprintf(fp, "\n");
+    for(int i = 0; i < dim1; i++){
+        for(int j = 0; j < dim2; j++){
+            fprintf(fp, "%d ", matrix3[i*dim2 + j]);
+        }
+        fprintf(fp, "\n");
+    }
+    fprintf(fp, "\n");
+}
+
+
 
 MPI_Datatype create_point_type() {
     MPI_Datatype point_type;
@@ -59,7 +85,7 @@ MPI_Datatype create_point_type() {
     return point_type;
 }
 
-void transpose_matrix(std::vector<Point>& matrix, int N, int p) {
+std::vector<Point> transpose_matrix(std::vector<Point>& matrix, int N, int p) {
     MPI_Datatype point_type = create_point_type();
     std::vector<int> sendcounts(p, 0), sdispls(p, 0), recvcounts(p, 0), rdispls(p, 0);
 
@@ -90,9 +116,10 @@ void transpose_matrix(std::vector<Point>& matrix, int N, int p) {
         std::swap(point.r, point.c);
     }
 
-    matrix = std::move(transposed_matrix);
+    // matrix = transposed_matrix;
 
     MPI_Type_free(&point_type);
+    return transposed_matrix;
 }
 
 
@@ -193,12 +220,21 @@ int* mat_mul_real(int* first, int* second, int N){
 void mat_mul(vector<Point>& a, vector<Point>& b, int* c, int N, int p) {
     for (Point& pb : b) {
         for (Point& pa : a) {
-            if (pa.c == pb.r) {
+            if (pa.c == pb.c) {
                 int new_val = pa.v * pb.v;
-                int idx = ((pa.r % (N/p))* N) + pb.c;
+                int idx = ((pa.r % (N/p))* N) + pb.r;
                 c[idx] += new_val;
             }
         }
+    }
+}
+
+void printMatrix(int* matrix, int rows, int cols) {
+    for (int i = 0; i < rows; i++) {
+        for (int j = 0; j < cols; j++) {
+            std::cout << std::setw(4) << matrix[i * cols + j] << " ";
+        }
+        std::cout << std::endl;
     }
 }
 
@@ -221,7 +257,8 @@ int main(int argc, char** argv) {
     char* out_file = argv[4];  // Ofile name
     vector<Point> A = generate_sparse(s, N, p, rank, 0);
     vector<Point> B = generate_sparse(s, N, p, rank, 1);
-    transpose_matrix(B, N, p);
+    vector<Point> oldB = B;
+    vector<Point> tranB = transpose_matrix(B, N, p);
 
     printf("\n");
 
@@ -242,31 +279,31 @@ int main(int argc, char** argv) {
     int src, dst;
     MPI_Cart_shift(comm, 0, 1, &src, &dst);
 
-    int local_B_size = B.size();
-    std::vector<int> sizes(p);
-    MPI_Allgather(&local_B_size, 1, MPI_INT, sizes.data(), 1, MPI_INT, MPI_COMM_WORLD);
+    // int local_B_size = B.size();
+    // std::vector<int> sizes(p);
+    // MPI_Allgather(&local_B_size, 1, MPI_INT, sizes.data(), 1, MPI_INT, MPI_COMM_WORLD);
 
     int* mat_A = gather_and_return_matrix(A, N, p, rank);
-    int* mat_B = gather_and_return_matrix(B, N, p, rank);
+    int* mat_B = gather_and_return_matrix(oldB, N, p, rank);
 
 
-    for (int i = 0; i < sizes.size(); i++) {
-        cout << sizes.at(i) << " ";
-    }
+    // for (int i = 0; i < sizes.size(); i++) {
+    //     cout << sizes.at(i) << " ";
+    // }
 
     MPI_Datatype point_type = create_point_type();
     for (int iter = 0; iter < p; iter++) {
-        mat_mul(A, B, C, N, p);
+        mat_mul(A, tranB, C, N, p);
 
-        int send_size = B.size();
+        int send_size = tranB.size();
         int recv_size;
         MPI_Sendrecv(&send_size, 1, MPI_INT, dst, 0, &recv_size, 1, MPI_INT, src, 0, comm, MPI_STATUS_IGNORE);
 
         vector<Point> rec_buffer(recv_size);
-        MPI_Sendrecv(B.data(), send_size, point_type, dst, 0, rec_buffer.data(), recv_size, point_type, src, 0, comm, MPI_STATUS_IGNORE);
+        MPI_Sendrecv(tranB.data(), send_size, point_type, dst, 0, rec_buffer.data(), recv_size, point_type, src, 0, comm, MPI_STATUS_IGNORE);
 
-        B.resize(recv_size);
-        B = rec_buffer;
+        tranB.resize(recv_size);
+        tranB = rec_buffer;
     }
     MPI_Type_free(&point_type);
 
@@ -284,13 +321,16 @@ int main(int argc, char** argv) {
     MPI_Gather(C, N*N/p , MPI_INT, global_C , N*N/p , MPI_INT, 0, MPI_COMM_WORLD);
 
     if(rank == 0){
-        printMatrix(global_C, N, N);
-        printf("\n");
+        // printMatrix(global_C, N, N);
+        // printf("\n");
+        // printMatrix(mat_mul_real(mat_A, mat_B, N), N, N);
         printMatrix(mat_mul_real(mat_A, mat_B, N), N, N);
     }
 
     if (pf == 1) {
-
+        if(rank == 0){
+            print_matrix_all(mat_A, mat_B, global_C, out_file, N, N);
+        }
     }
 
 
