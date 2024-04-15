@@ -14,7 +14,7 @@ struct Point {
 
 using namespace std;
 vector<Point> generate_sparse(float s, int N, int p, int rank, int seed) {
-    vector<Point> gen_mat;
+    vector<Point> m;
     int count = 0;
     int start_row = rank * (N / p);
     int end_row = (rank + 1) * (N / p);
@@ -25,12 +25,12 @@ vector<Point> generate_sparse(float s, int N, int p, int rank, int seed) {
             if (randd < s * N) {
                 int rand_value = (rand() % 10);
                 Point point = {r, c, rand_value};
-                gen_mat.push_back(point);
+                m.push_back(point);
                 count += 1;
             }
         }
     }
-    return gen_mat;
+    return m;
 }
 
 void print_matrix(int* matrix, char* outfile, int dim1, int dim2){
