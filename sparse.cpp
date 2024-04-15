@@ -43,48 +43,6 @@ void print_matrix(int* matrix, char* outfile, int dim1, int dim2){
     }
 }
 
-void print_mat(vector<Point> matrix, char* outfile){
-    int all_vals = matrix.size();
-    char *filename = outfile;
-    FILE * fp = fopen(filename, "w");
-    for (int i = 0; i < all_vals; i++) {
-        fprintf(fp, "(%d, %d, %d)\n", matrix[i].r, matrix[i].c, matrix[i].v);
-    }
-}
-
-void print_mat_int(vector<int> matrix){
-    int all_vals = matrix.size();
-    char *filename = "example.txt";
-    FILE * fp = fopen(filename, "w");
-    for (int i = 0; i < all_vals; i++) {
-        fprintf(fp, "%d ", matrix[i]);
-    }
-}
-
-void print_dense_matrix(const vector<Point>& matrix, int N, int p, int rank) {
-    vector< vector<int> > dense_matrix(N, vector<int>(N, 0));
-    for (const Point& point : matrix) {
-        dense_matrix[point.r][point.c] = point.v;
-    }
-
-    for (int i = 0; i < N; i++) {
-        for (int j = 0; j < N; j++) {
-            cout << dense_matrix[i][j] << " ";
-        }
-        cout << endl;
-    }
-}
-
-int* vec_mat(vector<Point> matrix, int dim1, int dim2){
-    int* mat = new int[dim1*dim2];
-
-    for (int i = 0; i < matrix.size(); i++) {
-        int row = matrix[i].r;
-        int col = matrix[i].c;
-        mat[row*dim2 + col] += matrix[i].v;
-    }    
-    return mat;
-}
 
 MPI_Datatype create_point_type() {
     MPI_Datatype point_type;
@@ -137,14 +95,6 @@ void transpose_matrix(std::vector<Point>& matrix, int N, int p) {
     MPI_Type_free(&point_type);
 }
 
-void printMatrix(int* matrix, int rows, int cols) {
-    for (int i = 0; i < rows; i++) {
-        for (int j = 0; j < cols; j++) {
-            std::cout << std::setw(4) << matrix[i * cols + j] << " ";
-        }
-        std::cout << std::endl;
-    }
-}
 
 void gather_and_print_matrix(const std::vector<Point>& local_matrix, int N, int p, int rank) {
     MPI_Datatype point_type = create_point_type();
@@ -308,10 +258,14 @@ int main(int argc, char** argv) {
     for (int iter = 0; iter < p; iter++) {
         mat_mul(A, B, C, N, p);
 
-        vector<Point> rec_buffer(sizes[src]);
-        MPI_Sendrecv(B.data(), B.size(), point_type, dst, 0, rec_buffer.data(), sizes[src], point_type, src, 0, comm, MPI_STATUS_IGNORE);
+        int send_size = B.size();
+        int recv_size;
+        MPI_Sendrecv(&send_size, 1, MPI_INT, dst, 0, &recv_size, 1, MPI_INT, src, 0, comm, MPI_STATUS_IGNORE);
 
-        B.resize(sizes[src]);
+        vector<Point> rec_buffer(recv_size);
+        MPI_Sendrecv(B.data(), send_size, point_type, dst, 0, rec_buffer.data(), recv_size, point_type, src, 0, comm, MPI_STATUS_IGNORE);
+
+        B.resize(recv_size);
         B = rec_buffer;
     }
     MPI_Type_free(&point_type);
