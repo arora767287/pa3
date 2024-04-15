@@ -132,7 +132,12 @@ int* gather_and_return_matrix(const std::vector<Point>& curr_matrix, int N, int 
         }
     }
 
-    vector<Point> all_points(rank == 0 ? (displs[p - 1] + sizes[p - 1]) : 0);
+    vector<Point> all_points(0);
+
+    if(rank == 0){
+        all_points.resize(displs[p - 1] + sizes[p - 1]);
+    }
+
     MPI_Gatherv(curr_matrix.data(), curr_size, point_type, all_points.data(), sizes.data(), displs.data(), point_type, 0, MPI_COMM_WORLD);
     if (rank == 0) {
         int* matrix = new int[N*N];
