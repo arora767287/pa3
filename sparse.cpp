@@ -84,7 +84,7 @@ MPI_Datatype create_point_type() {
     return point;
 }
 
-std::vector<Point> transpose_matrix(std::vector<Point>& matrix, int N, int p) {
+vector<Point> transpose_matrix(std::vector<Point>& matrix, int N, int p) {
     MPI_Datatype point_type = create_point_type();
     std::vector<int> sendcounts(p, 0), sdispls(p, 0), recvcounts(p, 0), rdispls(p, 0);
 
@@ -132,18 +132,18 @@ int* gather_and_return_matrix(const std::vector<Point>& curr_matrix, int N, int 
         }
     }
 
-    std::vector<Point> all_points(rank == 0 ? (displs[p - 1] + sizes[p - 1]) : 0);
+    vector<Point> all_points(rank == 0 ? (displs[p - 1] + sizes[p - 1]) : 0);
     MPI_Gatherv(curr_matrix.data(), curr_size, point_type, all_points.data(), sizes.data(), displs.data(), point_type, 0, MPI_COMM_WORLD);
-
+    int* matrix = new int[N*N];
     if (rank == 0) {
-        int* matrix = new int[N*N];
+        matrix = new int[N*N];
         for (Point& point : all_points) {
             matrix[(point.r)*N + point.c] = point.v;
         }
         return matrix;
     }
-
     MPI_Type_free(&point_type);
+    return matrix;
 }
 
 int* mat_convert(vector<Point>& all_points, int N){
