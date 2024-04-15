@@ -134,16 +134,18 @@ int* gather_and_return_matrix(const std::vector<Point>& curr_matrix, int N, int 
 
     vector<Point> all_points(rank == 0 ? (displs[p - 1] + sizes[p - 1]) : 0);
     MPI_Gatherv(curr_matrix.data(), curr_size, point_type, all_points.data(), sizes.data(), displs.data(), point_type, 0, MPI_COMM_WORLD);
-    int* matrix = new int[N*N];
     if (rank == 0) {
-        matrix = new int[N*N];
+        int* matrix = new int[N*N];
+        for(int i = 0; i < N*N; i++){
+            matrix[i] = 0;
+        }
         for (Point& point : all_points) {
             matrix[(point.r)*N + point.c] = point.v;
         }
         return matrix;
     }
     MPI_Type_free(&point_type);
-    return matrix;
+    return NULL;
 }
 
 int* mat_convert(vector<Point>& all_points, int N){
@@ -154,18 +156,30 @@ int* mat_convert(vector<Point>& all_points, int N){
     return global_C;
 }
 
+
 int* mat_mul_real(int* first, int* second, int N){
     int* global_C = new int[N*N];
     for(int i = 0; i < N; i++){
         for(int j = 0; j < N; j++){
             global_C[i * N + j] = 0;
             for (int k = 0; k < N; k++) {
-                global_C[i*N + j] += first[i*N + k] * second[k*N + j];
+                global_C[i * N + j] += first[i * N + k] * second[k * N + j];
+                // printf("%d", global_C[i * N + j]);
             }
         }
     }
     return global_C;
 }
+
+void printMatrix(int* matrix, int rows, int cols) {
+    for (int i = 0; i < rows; i++) {
+        for (int j = 0; j < cols; j++) {
+            std::cout << matrix[i * cols + j] << " ";
+        }
+        std::cout << std::endl;
+    }
+}
+
 
 void mat_mul(vector<Point>& a, vector<Point>& b, int* c, int N, int p) {
     for (Point& pb : b) {
@@ -218,6 +232,13 @@ int main(int argc, char** argv) {
 
     int* mat_A = gather_and_return_matrix(A, N, p, rank);
     int* mat_B = gather_and_return_matrix(oldB, N, p, rank);
+
+    if(rank == 0){
+        if(mat_A != NULL || mat_B != NULL){
+            printMatrix(mat_mul_real(mat_A, mat_B, N), N, N);
+        }
+        
+    }
 
     MPI_Datatype point_type = create_point_type();
     for (int iter = 0; iter < p; iter++) {
