@@ -6,13 +6,23 @@
 #include <fstream>
 #include <vector>
 
+using namespace std;
+
 struct Point {
     int r;
     int c;
     int v;
 };
 
-using namespace std;
+bool sort_by_row(const Point &a, const Point &b) {
+    return a.r < b.r;
+}
+
+bool sort_by_col(const Point &a, const Point &b) {
+    if (a.c != b.c) return a.c < b.c;
+    return a.r < b.r;
+}
+
 vector<Point> generate_sparse(float s, int N, int p, int rank, int seed) {
     vector<Point> m;
     int count = 0;
@@ -31,16 +41,6 @@ vector<Point> generate_sparse(float s, int N, int p, int rank, int seed) {
         }
     }
     return m;
-}
-
-void print_matrix(int* matrix, char* outfile, int dim1, int dim2){
-    FILE * fp = fopen(outfile, "w");
-    for(int i = 0; i < dim1; i++){
-        for(int j = 0; j < dim2; j++){
-            fprintf(fp, "%d ", matrix[i*dim2 + j]);
-        }
-        fprintf(fp, "\n");
-    }
 }
 
 void print_matrix_all(int* matrix, int* matrix2, int* matrix3, char* outfile, int dim1, int dim2){
@@ -153,29 +153,22 @@ int* gather_and_return_matrix(const std::vector<Point>& curr_matrix, int N, int 
     return NULL;
 }
 
-int* mat_convert(vector<Point>& all_points, int N){
-    int* global_C = new int[N*N];
-    for (Point& point : all_points) {
-        global_C[point.r*N + point.c] = point.v;
-    }
-    return global_C;
-}
 
-
-int* mat_mul_real(int* first, int* second, int N){
+// for testing, delete later
+int* mat_mul_serial(int* first, int* second, int N){
     int* global_C = new int[N*N];
     for(int i = 0; i < N; i++){
         for(int j = 0; j < N; j++){
             global_C[i * N + j] = 0;
             for (int k = 0; k < N; k++) {
                 global_C[i * N + j] += first[i * N + k] * second[k * N + j];
-                // printf("%d", global_C[i * N + j]);
             }
         }
     }
     return global_C;
 }
 
+// for testing, delete later
 void printMatrix(int* matrix, int rows, int cols) {
     for (int i = 0; i < rows; i++) {
         for (int j = 0; j < cols; j++) {
@@ -186,17 +179,46 @@ void printMatrix(int* matrix, int rows, int cols) {
 }
 
 
-void mat_mul(vector<Point>& a, vector<Point>& b, int* c, int N, int p) {
-    for (Point& pb : b) {
-        for (Point& pa : a) {
-            if (pa.c == pb.c) {
-                int new_val = pa.v * pb.v;
-                int idx = ((pa.r % (N/p))* N) + pb.r;
-                c[idx] += new_val;
-            }
+// void mat_mul_naive(vector<Point>& a, vector<Point>& b, int* c, int N, int p) {
+//     for (Point& pb : b) {
+//         for (Point& pa : a) {
+//             if (pa.c == pb.c) {
+//                 int new_val = pa.v * pb.v;
+//                 int idx = ((pa.r % (N/p))* N) + pb.r;
+//                 c[idx] += new_val;
+//             }
+//         }
+//     }
+// }
+
+
+void mat_mul_dot_product(vector<Point>& a, vector<Point>& b, int* c, int N, int p, int rank) {
+    // sort A by row
+    // sort B by col
+    // for all A, multiply with rows in B where B_r = A_c, result goes into ((pa.r % (N/p))* N) + pb.r;
+    std::sort(a.begin(), a.end(), sort_by_col);
+    std::sort(b.begin(), b.end(), sort_by_row);
+
+    int bpointer = 0;
+    int bstart = 0;
+    int old_a_col = -1;
+
+    for (Point &pa: a) {
+        if (old_a_col == pa.c) bpointer = bstart;
+        while (bpointer < b.size() && b[bpointer].r < pa.c) {
+            bpointer++;
         }
+        bstart = bpointer;
+        while (bpointer < b.size() && pa.c == b[bpointer].r) {
+            int new_val = pa.v * b[bpointer].v;
+            int idx = ((pa.r % (N/p))* N) + b[bpointer].c;
+            c[idx] += new_val;
+            bpointer++;
+        }
+        old_a_col = pa.c;
     }
 }
+
 
 int main(int argc, char** argv) {
 
@@ -240,14 +262,14 @@ int main(int argc, char** argv) {
 
     if(rank == 0){
         if(mat_A != NULL || mat_B != NULL){
-            printMatrix(mat_mul_real(mat_A, mat_B, N), N, N);
+            printMatrix(mat_mul_serial(mat_A, mat_B, N), N, N);
         }
         
     }
 
     MPI_Datatype point_type = create_point_type();
     for (int iter = 0; iter < p; iter++) {
-        mat_mul(A, tranB, C, N, p);
+        mat_mul_dot_product(A, tranB, C, N, p);
 
         int send = tranB.size();
         int recv;

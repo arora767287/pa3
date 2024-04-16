@@ -44,7 +44,11 @@
         "algorithm": "cpp",
         "vector": "cpp",
         "array": "cpp",
-        "__split_buffer": "cpp"
+        "__split_buffer": "cpp",
+        "__hash_table": "cpp",
+        "deque": "cpp",
+        "unordered_map": "cpp",
+        "filesystem": "cpp"
     },
     "C_Cpp.errorSquiggles": "enabled"
 }
