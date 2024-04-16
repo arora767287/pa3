@@ -18,8 +18,8 @@ struct Point {
 struct CSR {
     vector<int> rows;
     vector<int> cols;
-    vector<int> values;
-}
+    vector<int> vals;
+};
 
 bool sort_by_row(const Point &a, const Point &b) {
     return a.r < b.r;
@@ -50,7 +50,8 @@ vector<Point> generate_sparse(float s, int N, int p, int rank, int seed) {
     return m;
 }
 
-vector<Point> generate_sparse_bonus(float s, int N, int p, int rank, int seed) {
+//generates matrix in CSR
+CSR generate_sparse_bonus(float s, int N, int p, int rank, int seed) {
     CSR m;
     vector<int> rows;
     vector<int> cols;
@@ -71,11 +72,65 @@ vector<Point> generate_sparse_bonus(float s, int N, int p, int rank, int seed) {
                 vals.push_back(rand_value);
             }
         }
-        rows.push_back(val_count)
+        rows.push_back(val_count);
     }
 
     return m;
 }
+
+//generates matrix with the transpose as well (both in CSR)
+CSR generate_sparse_bonus_T(float s, int N, int p, int rank, int seed, CSR& transpose) {
+    CSR m;
+    vector<int> rows;
+    vector<int> cols;
+    vector<int> vals;
+
+    vector<int> csc_rows;
+    vector<int> csc_cols;
+    vector<int> csc_vals;
+
+    vector<int> count_all(N, 0);
+    rows.push_back(0);
+    csc_cols.push_back(0);
+
+    int start_row = rank * (N / p);
+    int end_row = (rank + 1) * (N / p);
+    srand(time(NULL) + rank + seed); 
+    int val_count = 0;
+    for (int r = start_row; r < end_row; r++) {
+        for (int c = 0; c < N; c++){
+            int randd = rand() % N;
+            if (randd < s * N) {
+                int rand_value = (rand() % 10);
+                val_count += 1;
+                cols.push_back(c);
+                vals.push_back(rand_value);
+                csc_vals.push_back(rand_value);
+                csc_rows.push_back(r);
+                count_all[c] += 1;
+            }
+        }
+        rows.push_back(val_count);
+    }
+
+    int total_count = 0;
+    for(int i = 0; i < N; i++){
+        csc_cols[i] = total_count;
+        total_count += count_all[i];
+    }
+    csc_cols.push_back(total_count);
+
+    transpose.rows = csc_cols;
+    transpose.cols = csc_rows;
+    transpose.vals = csc_vals;
+
+    m.rows = rows;
+    m.cols = cols;
+    m.vals = vals;
+
+    return m;
+}
+
 
 void print_matrix_all(int* matrix, int* matrix2, int* matrix3, char* outfile, int dim1, int dim2){
     FILE * fp = fopen(outfile, "w");
@@ -119,8 +174,6 @@ MPI_Datatype create_point_type() {
 }
 
 
-CSR transpose_matrix_bonus(CSR m, int N, int p) {
-}
 
 
 vector<Point> transpose_matrix(std::vector<Point>& matrix, int N, int p) {
@@ -269,16 +322,17 @@ void mat_mul_bonus(CSR a, CSR b, int* c, int N, int p){
     for(int i = 1; i < a_rows.size(); i++){
         for(int j = 1; j < b_rows.size(); j++){
             int counter_a = 0;
+            int counter_b = 0;
             while(counter_a < a_rows[i] - a_rows[i-1] && counter_b < b_rows[i] - b_rows[i-1]){
                 int a_row = i;
-                int a_col = cols[a_rows[i] + counter_a];
-                int b_col = cols[b_rows[i] + counter_b];
+                int a_col = a_cols[a_rows[i] + counter_a];
+                int b_col = b_cols[b_rows[i] + counter_b];
                 if(a_col < b_col){
                     counter_a += 1;
                 } else if (b_col < a_col){
                     counter_b += 1;
                 } else {
-                    c[i][j] += a_vals[a_rows[i] + counter_a]*b_vals[b_rows[i] + counter_a];    
+                    c[i*N + j] += a_vals[a_rows[i] + counter_a]*b_vals[b_rows[i] + counter_a];    
                     counter_a += 1;   
                     counter_b += 1;      
                 }
@@ -334,10 +388,12 @@ int main(int argc, char** argv) {
     int pf = stoi(argv[3]);  // printing flag
     char* out_file = argv[4];  // Ofile name
     
-    // vector<Point> A = generate_sparse(s, N, p, rank, 0);
-    // vector<Point> B = generate_sparse(s, N, p, rank, 1);
-    vector<Point> A = generate_sparse_bonus(s, N, p, rank, 0);
-    vector<Point> B = generate_sparse_bonus(s, N, p, rank, 0);
+    vector<Point> A = generate_sparse(s, N, p, rank, 0);
+    vector<Point> B = generate_sparse(s, N, p, rank, 1);
+
+    // CSR tranB;
+    // CSR A = generate_sparse_bonus(s, N, p, rank, 0);
+    // CSR B = generate_sparse_bonus_T(s, N, p, rank, 1, &tranB);
 
     int C_size = N * N / p;
     int* C = new int[C_size];
@@ -358,7 +414,9 @@ int main(int argc, char** argv) {
         start_time = MPI_Wtime();
     }
 
+    //normal implemnetation
     vector<Point> tranB = transpose_matrix(B, N, p);
+
     // if(rank == 0){ // for testing
     //     if(mat_A != NULL || mat_B != NULL){
     //         printMatrix(mat_mul_serial(mat_A, mat_B, N), N, N);
@@ -368,8 +426,9 @@ int main(int argc, char** argv) {
 
     MPI_Datatype point_type = create_point_type();
     for (int iter = 0; iter < p; iter++) {
-        mat_mul_bonus(A, tranB, C, N, p);
-        // mat_mul_naive(A, tranB, C, N, p);
+
+        // mat_mul_bonus(A, tranB, C, N, p);
+        mat_mul_naive(A, tranB, C, N, p);
 
         int send = tranB.size();
         int recv;
