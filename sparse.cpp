@@ -15,6 +15,12 @@ struct Point {
     int v;
 };
 
+struct CSR {
+    vector<int> rows;
+    vector<int> cols;
+    vector<int> values;
+}
+
 bool sort_by_row(const Point &a, const Point &b) {
     return a.r < b.r;
 }
@@ -41,6 +47,33 @@ vector<Point> generate_sparse(float s, int N, int p, int rank, int seed) {
             }
         }
     }
+    return m;
+}
+
+vector<Point> generate_sparse_bonus(float s, int N, int p, int rank, int seed) {
+    CSR m;
+    vector<int> rows;
+    vector<int> cols;
+    vector<int> vals;
+    rows.push_back(0);
+
+    int start_row = rank * (N / p);
+    int end_row = (rank + 1) * (N / p);
+    srand(time(NULL) + rank + seed); 
+    int val_count = 0;
+    for (int r = start_row; r < end_row; r++) {
+        for (int c = 0; c < N; c++){
+            int randd = rand() % N;
+            if (randd < s * N) {
+                int rand_value = (rand() % 10);
+                val_count += 1;
+                cols.push_back(c);
+                vals.push_back(rand_value);
+            }
+        }
+        rows.push_back(val_count)
+    }
+
     return m;
 }
 
@@ -84,6 +117,11 @@ MPI_Datatype create_point_type() {
     MPI_Type_commit(&point);
     return point;
 }
+
+
+CSR transpose_matrix_bonus(CSR m, int N, int p) {
+}
+
 
 vector<Point> transpose_matrix(std::vector<Point>& matrix, int N, int p) {
     MPI_Datatype point_type = create_point_type();
@@ -175,20 +213,82 @@ void printMatrix(int* matrix, int rows, int cols) {
 }
 
 
-// void mat_mul_naive(vector<Point>& a, vector<Point>& b, int* c, int N, int p) {
-//     for (Point& pb : b) {
-//         for (Point& pa : a) {
-//             if (pa.c == pb.c) {
-//                 int new_val = pa.v * pb.v;
-//                 int idx = ((pa.r % (N/p))* N) + pb.r;
-//                 c[idx] += new_val;
-//             }
-//         }
-//     }
-// }
+void mat_mul_naive(vector<Point>& a, vector<Point>& b, int* c, int N, int p) {
+    for (Point& pb : b) {
+        for (Point& pa : a) {
+            if (pa.c == pb.c) {
+                int new_val = pa.v * pb.v;
+                int idx = ((pa.r % (N/p))* N) + pb.r;
+                c[idx] += new_val;
+            }
+        }
+    }
+}
 
 
 void mat_mul_dot_product(vector<Point>& a, vector<Point>& b, int* c, int N, int p) {
+    // sort A by row
+    // sort B by col
+    // for all A, multiply with rows in B where B_r = A_c, result goes into ((pa.r % (N/p))* N) + pb.r;
+    std::sort(a.begin(), a.end(), sort_by_col);
+    std::sort(b.begin(), b.end(), sort_by_row);
+
+    int bpointer = 0;
+    int bstart = 0;
+    int old_a_col = -1;
+
+    for (Point &pa: a) {
+        if (old_a_col == pa.c) bpointer = bstart;
+        while (bpointer < b.size() && b[bpointer].r < pa.c) {
+            bpointer++;
+        }
+        bstart = bpointer;
+        while (bpointer < b.size() && pa.c == b[bpointer].r) {
+            int new_val = pa.v * b[bpointer].v;
+            int idx = ((pa.r % (N/p))* N) + b[bpointer].c;
+            c[idx] += new_val;
+            bpointer++;
+        }
+        old_a_col = pa.c;
+    }
+}
+
+//transpose matrix first, so b's rows are original b matrix columns
+void mat_mul_bonus(CSR a, CSR b, int* c, int N, int p){
+    vector<int> a_rows = a.rows;
+    vector<int> b_rows = b.rows;    
+
+    vector<int> a_cols = a.cols;
+    vector<int> b_cols = b.cols;
+
+    vector<int> a_vals = a.vals;
+    vector<int> b_vals = b.vals;
+
+    int a_col = 0;
+    int b_col = 0;
+    for(int i = 1; i < a_rows.size(); i++){
+        for(int j = 1; j < b_rows.size(); j++){
+            int counter_a = 0;
+            while(counter_a < a_rows[i] - a_rows[i-1] && counter_b < b_rows[i] - b_rows[i-1]){
+                int a_row = i;
+                int a_col = cols[a_rows[i] + counter_a];
+                int b_col = cols[b_rows[i] + counter_b];
+                if(a_col < b_col){
+                    counter_a += 1;
+                } else if (b_col < a_col){
+                    counter_b += 1;
+                } else {
+                    c[i][j] += a_vals[a_rows[i] + counter_a]*b_vals[b_rows[i] + counter_a];    
+                    counter_a += 1;   
+                    counter_b += 1;      
+                }
+
+            }
+        }
+    }
+}
+
+void mat_mul_outer_product(vector<Point>& a, vector<Point>& b, int* c, int N, int p) {
     // sort A by row
     // sort B by col
     // for all A, multiply with rows in B where B_r = A_c, result goes into ((pa.r % (N/p))* N) + pb.r;
@@ -234,8 +334,10 @@ int main(int argc, char** argv) {
     int pf = stoi(argv[3]);  // printing flag
     char* out_file = argv[4];  // Ofile name
     
-    vector<Point> A = generate_sparse(s, N, p, rank, 0);
-    vector<Point> B = generate_sparse(s, N, p, rank, 1);
+    // vector<Point> A = generate_sparse(s, N, p, rank, 0);
+    // vector<Point> B = generate_sparse(s, N, p, rank, 1);
+    vector<Point> A = generate_sparse_bonus(s, N, p, rank, 0);
+    vector<Point> B = generate_sparse_bonus(s, N, p, rank, 0);
 
     int C_size = N * N / p;
     int* C = new int[C_size];
@@ -266,7 +368,8 @@ int main(int argc, char** argv) {
 
     MPI_Datatype point_type = create_point_type();
     for (int iter = 0; iter < p; iter++) {
-        mat_mul_dot_product(A, tranB, C, N, p);
+        mat_mul_bonus(A, tranB, C, N, p);
+        // mat_mul_naive(A, tranB, C, N, p);
 
         int send = tranB.size();
         int recv;
