@@ -243,13 +243,7 @@ int main(int argc, char** argv) {
         C[i] = 0;
     }
 
-    double start_time;
-    if (rank == 0) {
-        start_time = MPI_Wtime();
-    }
-
     vector<Point> oldB = B;
-    vector<Point> tranB = transpose_matrix(B, N, p);
 
     int src, dst;
     MPI_Cart_shift(comm, 0, 1, &src, &dst);
@@ -257,6 +251,12 @@ int main(int argc, char** argv) {
     int* mat_A = gather_and_return_matrix(A, N, p, rank);
     int* mat_B = gather_and_return_matrix(oldB, N, p, rank);
 
+    double start_time;
+    if (rank == 0) {
+        start_time = MPI_Wtime();
+    }
+
+    vector<Point> tranB = transpose_matrix(B, N, p);
     // if(rank == 0){ // for testing
     //     if(mat_A != NULL || mat_B != NULL){
     //         printMatrix(mat_mul_serial(mat_A, mat_B, N), N, N);
