@@ -109,11 +109,6 @@ vector<Point> transpose_matrix(std::vector<Point>& matrix, int N, int p) {
 
     MPI_Alltoallv(matrix.data(), sendcounts.data(), sdispls.data(), point_type, transposed_matrix.data(), recvcounts.data(), rdispls.data(), point_type, MPI_COMM_WORLD);
 
-    for (Point& point : transposed_matrix) {
-        int temp = point.r;
-        point.r = point.c;
-        point.c = temp;
-    }
     MPI_Type_free(&point_type);
     return transposed_matrix;
 }
@@ -192,7 +187,7 @@ void printMatrix(int* matrix, int rows, int cols) {
 // }
 
 
-void mat_mul_dot_product(vector<Point>& a, vector<Point>& b, int* c, int N, int p, int rank) {
+void mat_mul_dot_product(vector<Point>& a, vector<Point>& b, int* c, int N, int p) {
     // sort A by row
     // sort B by col
     // for all A, multiply with rows in B where B_r = A_c, result goes into ((pa.r % (N/p))* N) + pb.r;
