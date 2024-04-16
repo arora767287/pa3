@@ -5,6 +5,7 @@
 #include <iostream>
 #include <fstream>
 #include <vector>
+#include <algorithm>
 
 using namespace std;
 
@@ -235,8 +236,6 @@ int main(int argc, char** argv) {
     
     vector<Point> A = generate_sparse(s, N, p, rank, 0);
     vector<Point> B = generate_sparse(s, N, p, rank, 1);
-    vector<Point> oldB = B;
-    vector<Point> tranB = transpose_matrix(B, N, p);
 
     int C_size = N * N / p;
     int* C = new int[C_size];
@@ -249,18 +248,21 @@ int main(int argc, char** argv) {
         start_time = MPI_Wtime();
     }
 
+    vector<Point> oldB = B;
+    vector<Point> tranB = transpose_matrix(B, N, p);
+
     int src, dst;
     MPI_Cart_shift(comm, 0, 1, &src, &dst);
 
     int* mat_A = gather_and_return_matrix(A, N, p, rank);
     int* mat_B = gather_and_return_matrix(oldB, N, p, rank);
 
-    if(rank == 0){
-        if(mat_A != NULL || mat_B != NULL){
-            printMatrix(mat_mul_serial(mat_A, mat_B, N), N, N);
-        }
+    // if(rank == 0){ // for testing
+    //     if(mat_A != NULL || mat_B != NULL){
+    //         printMatrix(mat_mul_serial(mat_A, mat_B, N), N, N);
+    //     }
         
-    }
+    // }
 
     MPI_Datatype point_type = create_point_type();
     for (int iter = 0; iter < p; iter++) {

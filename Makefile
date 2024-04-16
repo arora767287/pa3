@@ -9,3 +9,9 @@ clean:
 
 sample:
 	mpirun -np 4 ./spmat 8 0.1 1 sparse_out
+
+pacesample:
+	srun -n 4 ./spmat 8 0.1 1 sparse_out
+
+pacerun:
+	srun -n $(np) ./spmat $(n) $(s) $(pf) $(out)
