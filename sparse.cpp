@@ -293,35 +293,22 @@ int* gather_and_return_CSR_matrix(const CSR& curr_matrix, int N, int p, int rank
 
 
 //transpose matrix first, so b's rows are original b matrix columns
-int dot_product(const CSR& A, int i, const CSR& B, int j) {
-    int sum = 0;
-    int a_index = A.rows[i], b_index = B.rows[j];
-    int a_end = A.rows[i + 1], b_end = B.rows[j + 1];
 
-    while (a_index < a_end && b_index < b_end) {
-        int a_col = A.cols[a_index];
-        int b_col = B.cols[b_index];
 
-        if (a_col == b_col) {
-            sum += A.vals[a_index] * B.vals[b_index];
-            a_index++;
-            b_index++;
-        } else if (a_col < b_col) {
-            a_index++;
-        } else {
-            b_index++;
-        }
-    }
+void mat_mul_bonus(CSR a, CSR b, int* c, int N, int p) {
+    // Initialize the result matrix c to zero
+    memset(c, 0, N * p * sizeof(int));
 
-    return sum;
-}
-
-void mat_mul_bonus(const CSR& A, const CSR& B, int* C, int N, int P) {
-    memset(C, 0, N * P * sizeof(int)); // Initialize the matrix C to zero
-
-    for (int i = 0; i < N; ++i) {
-        for (int j = 0; j < P; ++j) {
-            C[i * P + j] = dot_product(A, i, B, j);
+    // Perform matrix multiplication
+    for (int i = 0; i < N; ++i) {  // Loop over rows of A
+        for (int j = a.rows[i]; j < a.rows[i + 1]; ++j) {  // Loop over non-zero entries in row i of A
+            int a_col = a.cols[j]; // Column index in A, corresponds to row index in B^T
+            int a_val = a.vals[j]; // Value at A[i, a_col]
+            for (int k = b.rows[a_col]; k < b.rows[a_col + 1]; ++k) {
+                int b_col = b.cols[k];  // Column index in B^T, row index in original B
+                int b_val = b.vals[k]; // Value at B^T[a_col, b_col], which is B[b_col, a_col]
+                c[i * p + b_col] += a_val * b_val; // Accumulate product in C[i, b_col]
+            }
         }
     }
 }
@@ -378,7 +365,7 @@ int main(int argc, char** argv) {
 
     for (int iter = 0; iter < p; iter++) {
         mat_mul_bonus(A, tranB, C, N, p);
-
+        
         vector<int> send_buffer;
         serializeCSR(tranB, send_buffer);
         int send_size = send_buffer.size();
