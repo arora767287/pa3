@@ -61,16 +61,13 @@ void printCSRMatrix(const CSR& matrix, int numRows, int numCols) {
         int rowStart = matrix.rows[r];
         int rowEnd = (r + 1 < numRows) ? matrix.rows[r + 1] : matrix.cols.size();
 
-        // Current column to check for a non-zero value
         int currentColIndex = rowStart;
 
         for (int c = 0; c < numCols; c++) {
             if (currentColIndex < rowEnd && matrix.cols[currentColIndex] == c) {
-                // Print the non-zero value and move to the next non-zero element
                 std::cout << matrix.vals[currentColIndex] << " ";
                 currentColIndex++;
             } else {
-                // Print zero for this column
                 std::cout << "0 ";
             }
         }
@@ -80,6 +77,7 @@ void printCSRMatrix(const CSR& matrix, int numRows, int numCols) {
 
 void serializeCSR(const CSR& matrix, std::vector<int>& buffer) {
     buffer.clear();
+    //allocate memory using reserve for buffer
     buffer.push_back(matrix.rows.size());  // Number of row pointers
     buffer.push_back(matrix.cols.size());  // Number of column indices (and number of values)
     buffer.insert(buffer.end(), matrix.rows.begin(), matrix.rows.end());
@@ -98,17 +96,14 @@ void deserializeCSR(const std::vector<int>& buffer, CSR& matrix) {
     matrix.vals.assign(buffer.begin() + idx, buffer.begin() + idx + cols_size);
 }
 
-// Function to gather CSR matrices and assemble into a full matrix at root
 int* gather_and_assemble_CSR(int N, int p, int rank, const CSR& local_csr) {
     std::vector<int> serialized_data;
     serializeCSR(local_csr, serialized_data);
     int local_size = serialized_data.size();
 
-    // Gather sizes at root
     std::vector<int> all_sizes(p);
     MPI_Gather(&local_size, 1, MPI_INT, all_sizes.data(), 1, MPI_INT, 0, MPI_COMM_WORLD);
 
-    // Calculate total size and displacements for gathering at root
     std::vector<int> displacements;
     int total_size = 0;
     if (rank == 0) {
@@ -119,7 +114,6 @@ int* gather_and_assemble_CSR(int N, int p, int rank, const CSR& local_csr) {
         }
     }
 
-    // Gather all serialized data at root
     std::vector<int> all_data(total_size);
     MPI_Gatherv(serialized_data.data(), local_size, MPI_INT,
                 all_data.data(), all_sizes.data(), displacements.data(), MPI_INT, 0, MPI_COMM_WORLD);
@@ -132,13 +126,17 @@ int* gather_and_assemble_CSR(int N, int p, int rank, const CSR& local_csr) {
             CSR temp_csr;
             std::vector<int> temp_buffer(all_data.begin() + displacements[proc], all_data.begin() + displacements[proc] + all_sizes[proc]);
             deserializeCSR(temp_buffer, temp_csr);
-            // Assuming each CSR is a complete row block of N/p rows
-            int start_row = proc * (N / p);
+            // if(proc == 1){
+            //     printf("processor 1: \n");       
+            //     printCSRForm(temp_csr);
+            //     printf("\n");
+            // }
+            int start_row = proc * (N/p);
             for (size_t r = 0; r < temp_csr.rows.size() - 1; ++r) {
                 for (int idx = temp_csr.rows[r]; idx < temp_csr.rows[r + 1]; ++idx) {
                     int col = temp_csr.cols[idx];
                     int val = temp_csr.vals[idx];
-                    full_matrix[(start_row + r) * N + col] = val;
+                    full_matrix[((start_row + r) % N) * N + col] = val;
                 }
             }
         }
@@ -146,7 +144,56 @@ int* gather_and_assemble_CSR(int N, int p, int rank, const CSR& local_csr) {
     return full_matrix;
 }
 
-//generates matrix with the transpose as well (both in CSR)
+int* gather_and_assemble_CSR_T(int N, int p, int rank, const CSR& local_csr) {
+    std::vector<int> serialized_data;
+    serializeCSR(local_csr, serialized_data);
+    int local_size = serialized_data.size();
+
+    std::vector<int> all_sizes(p);
+    MPI_Gather(&local_size, 1, MPI_INT, all_sizes.data(), 1, MPI_INT, 0, MPI_COMM_WORLD);
+
+    std::vector<int> displacements;
+    int total_size = 0;
+    if (rank == 0) {
+        displacements.resize(p);
+        for (int i = 0; i < p; ++i) {
+            displacements[i] = total_size;
+            total_size += all_sizes[i];
+        }
+    }
+
+
+    std::vector<int> all_data(total_size);
+    MPI_Gatherv(serialized_data.data(), local_size, MPI_INT,
+                all_data.data(), all_sizes.data(), displacements.data(), MPI_INT, 0, MPI_COMM_WORLD);
+
+    int* full_matrix = nullptr;
+    if (rank == 0) {
+        full_matrix = new int[N * N](); 
+        int offset = 0;
+        for (int proc = 0; proc < p; ++proc) {
+            CSR temp_csr;
+            std::vector<int> temp_buffer(all_data.begin() + displacements[proc], all_data.begin() + displacements[proc] + all_sizes[proc]);
+            deserializeCSR(temp_buffer, temp_csr);
+            // if(proc == 1){
+            //     printf("processor 1: \n");       
+            //     printCSRForm(temp_csr);
+            //     printf("\n");
+            // }
+
+            int start_row = proc * (N/p);
+            for (size_t r = 0; r < temp_csr.rows.size() - 1; ++r) {
+                for (int idx = temp_csr.rows[r]; idx < temp_csr.rows[r + 1]; ++idx) {
+                    int col = temp_csr.cols[idx];
+                    int val = temp_csr.vals[idx];
+                    full_matrix[((start_row + r - (N/p)*proc) % N) * N + col] = val;
+                }
+            }
+        }
+    }
+    return full_matrix;
+}
+
 void generate_sparse_bonus_T(float s, int N, int p, int rank, int seed, CSR& transpose, CSR& m) {
     vector<int> rows(1, 0);
     vector<int> cols;
@@ -160,7 +207,7 @@ void generate_sparse_bonus_T(float s, int N, int p, int rank, int seed, CSR& tra
 
     int start_row = rank * (N / p);
     int end_row = (rank + 1) * (N / p);
-    srand(time(NULL) + rank + seed); 
+    srand(time(NULL) + rank + seed + 2); 
 
     int val_count = 0;
 
@@ -182,7 +229,6 @@ void generate_sparse_bonus_T(float s, int N, int p, int rank, int seed, CSR& tra
         rows.push_back(val_count);
     }
 
-    // Define a functor to use for sorting
     struct Comparator {
         const vector<int>& ref;
         Comparator(const vector<int>& v) : ref(v) {}
@@ -191,25 +237,22 @@ void generate_sparse_bonus_T(float s, int N, int p, int rank, int seed, CSR& tra
         }
     };
 
-    // Sorting for CSC using a helper index vector
     vector<int> index(transpose_rows.size(), 0);
-    iota(index.begin(), index.end(), 0); // Fill index with 0, 1, 2, ..., n-1
+    iota(index.begin(), index.end(), 0);
     sort(index.begin(), index.end(), Comparator(transpose_rows));
 
-    // Building CSC structure from sorted indices
     vector<int> csc_cols(N + 1, 0), csc_rows, csc_vals;
     for (int i : index) {
         csc_rows.push_back(transpose_cols[i]);
         csc_vals.push_back(transpose_vals[i]);
     }
 
-    // Fill csc_cols to complete CSC format
     for (int i = 0, col_offset = 0; i < transpose_rows.size(); ++i) {
         while (transpose_rows[index[i]] > col_offset) {
             csc_cols[++col_offset] = i;
         }
     }
-    csc_cols[N] = transpose_rows.size();  // Ensure the last entry covers all remaining elements
+    csc_cols[N] = transpose_rows.size();
 
     transpose.rows = csc_cols;
     transpose.cols = csc_rows;
@@ -297,7 +340,7 @@ int* gather_and_return_CSR_matrix(const CSR& curr_matrix, int N, int p, int rank
 
 void mat_mul_bonus(CSR a, CSR b, int* c, int N, int p) {
     // Initialize the result matrix c to zero
-    memset(c, 0, N * p * sizeof(int));
+    memset(c, 0, (N * N / p) * sizeof(int));
 
     // Perform matrix multiplication
     for (int i = 0; i < N; ++i) {  // Loop over rows of A
@@ -313,6 +356,42 @@ void mat_mul_bonus(CSR a, CSR b, int* c, int N, int p) {
     }
 }
 
+void mat_mul_csr(const CSR& A, const CSR& BT, int* C, int rowsA, int colsB) {
+    std::memset(C, 0, rowsA * colsB * sizeof(int));
+    for (int i = 0; i < rowsA; ++i) { 
+        for (int j = A.rows[i]; j < A.rows[i + 1]; ++j) { 
+            int colA = A.cols[j];
+            int valA = A.vals[j]; 
+            for (int k = BT.rows[colA]; k < BT.rows[colA + 1]; ++k) {
+                int colB = BT.cols[k];
+                int valBT = BT.vals[k];
+                C[i * colsB + colB] += valA * valBT;
+            }
+        }
+    }
+}
+
+void printMatrix(int* matrix, int rows, int cols) {
+    for (int i = 0; i < rows; i++) {
+        for (int j = 0; j < cols; j++) {
+            std::cout << matrix[i * cols + j] << " ";
+        }
+        std::cout << std::endl;
+    }
+}
+
+int* mat_mul_serial(int* first, int* second, int N){
+    int* global_C = new int[N*N];
+    for(int i = 0; i < N; i++){
+        for(int j = 0; j < N; j++){
+            global_C[i * N + j] = 0;
+            for (int k = 0; k < N; k++) {
+                global_C[i * N + j] += first[i * N + k] * second[k * N + j];
+            }
+        }
+    }
+    return global_C;
+}
 
 int main(int argc, char** argv) {
 
@@ -340,18 +419,31 @@ int main(int argc, char** argv) {
     generate_sparse_bonus_T(s, N, p, rank, 0, tranA, A);
     generate_sparse_bonus_T(s, N, p, rank, 1, tranB, B);
 
+    // if(rank == 1){
+    //     printCSRForm(B);
+    //     printf("\n");
+    //     printCSRForm(tranB);
+    // }
+
     int C_size = N * N / p;
     int* C = new int[C_size];
     for (int i = 0; i < C_size; i++) {
         C[i] = 0;
     }
 
+    // printCSRForm(tranB);
+    // printf("\n");
+    printCSRMatrix(tranB, N/p, N);
+    printf("\n");
+
     // int* mat_A = gather_and_return_CSR_matrix(B, N, p, rank);
 
     // int* mat_B = gather_and_return_CSR_matrix(tranB, N, p, rank);
 
-    int* mat_A = gather_and_assemble_CSR(N, p, rank, A);
-    int* mat_B = gather_and_assemble_CSR(N, p, rank, B);
+    int* mat_A = gather_and_assemble_CSR(N, p, rank, B);
+
+    int* mat_B = gather_and_assemble_CSR_T(N, p, rank, tranB);
+
 
     int src, dst;
     MPI_Cart_shift(comm, 0, 1, &src, &dst);
@@ -360,28 +452,31 @@ int main(int argc, char** argv) {
     if (rank == 0) {
         start_time = MPI_Wtime();
     }
-
     CSR new_tranB;
-
-    for (int iter = 0; iter < p; iter++) {
-        mat_mul_bonus(A, tranB, C, N, p);
+    // for (int iter = 0; iter < p; iter++) {
+    //     mat_mul_csr(A, tranB, C, N/p, N);
         
-        vector<int> send_buffer;
-        serializeCSR(tranB, send_buffer);
-        int send_size = send_buffer.size();
 
-        int recv_size;
-        MPI_Sendrecv(&send_size, 1, MPI_INT, dst, 0,
-                     &recv_size, 1, MPI_INT, src, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    //     vector<int> send_buffer;
+    //     serializeCSR(tranB, send_buffer);
+    //     int send_size = send_buffer.size();
+    //     if(rank == 0){
+    //         printCSRMatrix(tranB, N/p, N);
+    //         printf("\n");
+    //     }
 
-        vector<int> recv_buffer(recv_size);
-        MPI_Sendrecv(send_buffer.data(), send_size, MPI_INT, dst, 0,
-                     recv_buffer.data(), recv_size, MPI_INT, src, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    //     int recv_size;
+    //     MPI_Sendrecv(&send_size, 1, MPI_INT, dst, 0, &recv_size, 1, MPI_INT, src, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
-        deserializeCSR(recv_buffer, new_tranB);
-        tranB = new_tranB; 
+    //     vector<int> recv_buffer(recv_size);
+    //     MPI_Sendrecv(send_buffer.data(), send_size, MPI_INT, dst, 0, recv_buffer.data(), recv_size, MPI_INT, src, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
-    }
+    //     deserializeCSR(recv_buffer, new_tranB);
+
+
+    //     tranB = new_tranB; 
+
+    // }
 
     double end_time;
     if (rank == 0) {
@@ -398,6 +493,7 @@ int main(int argc, char** argv) {
 
     if (pf == 1) {
         if(rank == 0){
+            printMatrix(mat_mul_serial(mat_A, mat_B, N), N, N);
             print_matrix_all(mat_A, mat_B, global_C, out_file, N, N);
         }
     }

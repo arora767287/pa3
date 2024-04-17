@@ -1,5 +1,8 @@
 all:
-	mpicxx -o spmat sparse.cpp
+	mpicxx -std=c++17 -O3 -o spmat sparse.cpp
+
+bonus:
+	mpicxx -std=c++17 -O3 -o spmat sparse_bonus.cpp
 
 run:
 	mpirun -np $(np) ./spmat $(n) $(s) $(pf) $(out)
