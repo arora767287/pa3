@@ -8,7 +8,7 @@ clean:
 	rm -f spmat
 
 sample:
-	mpirun -np 4 ./spmat 8 0.1 1 sparse_out
+	mpirun -np 1 ./spmat 4 0.1 1 sparse_out
 
 pacesample:
 	srun -n 4 ./spmat 8 0.1 1 sparse_out

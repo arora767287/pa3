@@ -30,6 +30,55 @@ bool sort_by_col(const Point &a, const Point &b) {
     return a.r < b.r;
 }
 
+void printVector(const std::vector<int>& vec) {
+    std::cout << "[";
+    for (size_t i = 0; i < vec.size(); i++) {
+        std::cout << vec[i];
+        if (i < vec.size() - 1) {
+            std::cout << ", ";
+        }
+    }
+    std::cout << "]" << std::endl;
+}
+
+void printCSRForm(const CSR& matrix){
+    vector<int> rows = matrix.rows;
+    vector<int> cols = matrix.cols;
+    vector<int> vals = matrix.vals;
+    
+    printf("Rows: \n");
+    printVector(rows);
+    printf("Columns: \n");
+    printVector(cols);
+    printf("Values: \n");
+    printVector(vals);
+}
+
+void printCSRMatrix(const CSR& matrix, int numRows, int numCols) {
+    int currentRow = 0;
+    for (int r = 0; r < numRows; r++) {
+        int rowStart = matrix.rows[r];
+        int rowEnd = (r + 1 < numRows) ? matrix.rows[r + 1] : matrix.cols.size();
+
+        // Current column to check for a non-zero value
+        int currentColIndex = rowStart;
+
+        for (int c = 0; c < numCols; c++) {
+            if (currentColIndex < rowEnd && matrix.cols[currentColIndex] == c) {
+                // Print the non-zero value and move to the next non-zero element
+                std::cout << matrix.vals[currentColIndex] << " ";
+                currentColIndex++;
+            } else {
+                // Print zero for this column
+                std::cout << "0 ";
+            }
+        }
+        std::cout << std::endl;
+    }
+}
+
+
+
 vector<Point> generate_sparse(float s, int N, int p, int rank, int seed) {
     vector<Point> m;
     int count = 0;
@@ -86,39 +135,37 @@ CSR generate_sparse_bonus_T(float s, int N, int p, int rank, int seed, CSR& tran
     vector<int> vals;
 
     vector<int> csc_rows;
-    vector<int> csc_cols;
+    vector<int> csc_cols(1, 0); // Properly initialize with only the starting 0
     vector<int> csc_vals;
 
     vector<int> count_all(N, 0);
     rows.push_back(0);
-    csc_cols.push_back(0);
 
     int start_row = rank * (N / p);
     int end_row = (rank + 1) * (N / p);
     srand(time(NULL) + rank + seed); 
     int val_count = 0;
     for (int r = start_row; r < end_row; r++) {
-        for (int c = 0; c < N; c++){
+        for (int c = 0; c < N; c++) {
             int randd = rand() % N;
             if (randd < s * N) {
-                int rand_value = (rand() % 10);
-                val_count += 1;
+                int rand_value = (rand() % 9) + 1;
+                val_count++;
                 cols.push_back(c);
                 vals.push_back(rand_value);
                 csc_vals.push_back(rand_value);
                 csc_rows.push_back(r);
-                count_all[c] += 1;
+                count_all[c]++;
             }
         }
         rows.push_back(val_count);
     }
 
     int total_count = 0;
-    for(int i = 0; i < N; i++){
-        csc_cols[i] = total_count;
+    for (int i = 0; i < N; i++) {
         total_count += count_all[i];
+        csc_cols.push_back(total_count); // Correctly push back the growing index counts
     }
-    csc_cols.push_back(total_count);
 
     transpose.rows = csc_cols;
     transpose.cols = csc_rows;
@@ -156,6 +203,22 @@ void print_matrix_all(int* matrix, int* matrix2, int* matrix3, char* outfile, in
     }
     fprintf(fp, "\n");
 }
+
+// MPI_Datatype create_point_type() {
+//     MPI_Datatype point;
+//     int parts[3] = {1, 1, 1};
+
+//     MPI_Aint disp[3];
+//     disp[0] = offsetof(Point, r);
+//     disp[1] = offsetof(Point, c);
+//     disp[2] = offsetof(Point, v);
+
+//     MPI_Datatype part_types[3] = {MPI_INT, MPI_INT, MPI_INT};
+
+//     MPI_Type_create_struct(3, parts, disp, part_types, &point);
+//     MPI_Type_commit(&point);
+//     return point;
+// }
 
 MPI_Datatype create_point_type() {
     MPI_Datatype point;
@@ -388,34 +451,43 @@ int main(int argc, char** argv) {
     int pf = stoi(argv[3]);  // printing flag
     char* out_file = argv[4];  // Ofile name
     
-    vector<Point> A = generate_sparse(s, N, p, rank, 0);
-    vector<Point> B = generate_sparse(s, N, p, rank, 1);
+    // vector<Point> A = generate_sparse(s, N, p, rank, 0);
+    // vector<Point> B = generate_sparse(s, N, p, rank, 1);
 
-    // CSR tranB;
+    CSR tranB;
     // CSR A = generate_sparse_bonus(s, N, p, rank, 0);
-    // CSR B = generate_sparse_bonus_T(s, N, p, rank, 1, &tranB);
-
-    int C_size = N * N / p;
-    int* C = new int[C_size];
-    for (int i = 0; i < C_size; i++) {
-        C[i] = 0;
+    CSR B = generate_sparse_bonus_T(s, N, p, rank, 1, tranB);
+    if(rank == 0){
+        printCSRForm(B);
+        printf("\n\n");
+        printCSRForm(tranB);
+        // printCSRMatrix(B, N, N/p);
+        // printf("\n");
+        // printCSRMatrix(tranB, N/p, N);
     }
+    // generate_sparse_bonus_T(float s, int N, int p, int rank, int seed, CSR& transpose)
 
-    vector<Point> oldB = B;
+    // int C_size = N * N / p;
+    // int* C = new int[C_size];
+    // for (int i = 0; i < C_size; i++) {
+    //     C[i] = 0;
+    // }
 
-    int src, dst;
-    MPI_Cart_shift(comm, 0, 1, &src, &dst);
+    // vector<Point> oldB = B;
 
-    int* mat_A = gather_and_return_matrix(A, N, p, rank);
-    int* mat_B = gather_and_return_matrix(oldB, N, p, rank);
+    // int src, dst;
+    // MPI_Cart_shift(comm, 0, 1, &src, &dst);
 
-    double start_time;
-    if (rank == 0) {
-        start_time = MPI_Wtime();
-    }
+    // int* mat_A = gather_and_return_matrix(A, N, p, rank);
+    // int* mat_B = gather_and_return_matrix(oldB, N, p, rank);
+
+    // double start_time;
+    // if (rank == 0) {
+    //     start_time = MPI_Wtime();
+    // }
 
     //normal implemnetation
-    vector<Point> tranB = transpose_matrix(B, N, p);
+    // vector<Point> tranB = transpose_matrix(B, N, p);
 
     // if(rank == 0){ // for testing
     //     if(mat_A != NULL || mat_B != NULL){
@@ -424,40 +496,40 @@ int main(int argc, char** argv) {
         
     // }
 
-    MPI_Datatype point_type = create_point_type();
-    for (int iter = 0; iter < p; iter++) {
+    // MPI_Datatype point_type = create_point_type();
+    // for (int iter = 0; iter < p; iter++) {
 
-        // mat_mul_bonus(A, tranB, C, N, p);
-        mat_mul_naive(A, tranB, C, N, p);
+    //     // mat_mul_bonus(A, tranB, C, N, p);
+    //     mat_mul_naive(A, tranB, C, N, p);
 
-        int send = tranB.size();
-        int recv;
-        MPI_Sendrecv(&send, 1, MPI_INT, dst, 0, &recv, 1, MPI_INT, src, 0, comm, MPI_STATUS_IGNORE);
-        vector<Point> rec_buffer(recv);
-        MPI_Sendrecv(tranB.data(), send, point_type, dst, 0, rec_buffer.data(), recv, point_type, src, 0, comm, MPI_STATUS_IGNORE);
-        tranB.resize(recv);
-        tranB = rec_buffer;
-    }
-    MPI_Type_free(&point_type);
+    //     int send = tranB.size();
+    //     int recv;
+    //     MPI_Sendrecv(&send, 1, MPI_INT, dst, 0, &recv, 1, MPI_INT, src, 0, comm, MPI_STATUS_IGNORE);
+    //     vector<Point> rec_buffer(recv);
+    //     MPI_Sendrecv(tranB.data(), send, point_type, dst, 0, rec_buffer.data(), recv, point_type, src, 0, comm, MPI_STATUS_IGNORE);
+    //     tranB.resize(recv);
+    //     tranB = rec_buffer;
+    // }
+    // MPI_Type_free(&point_type);
 
-    double end_time;
-    if (rank == 0) {
-        end_time = MPI_Wtime();
-        double time_taken = end_time - start_time;
-        cout << "Time: " <<time_taken << endl;
-    }
+    // double end_time;
+    // if (rank == 0) {
+    //     end_time = MPI_Wtime();
+    //     double time_taken = end_time - start_time;
+    //     cout << "Time: " <<time_taken << endl;
+    // }
 
-    int* global_C = new int[N*N];
-    for (int i = 0; i < N*N; i++) {
-        global_C[i] = 0;
-    }
-    MPI_Gather(C, N*N/p , MPI_INT, global_C , N*N/p , MPI_INT, 0, MPI_COMM_WORLD);
+    // int* global_C = new int[N*N];
+    // for (int i = 0; i < N*N; i++) {
+    //     global_C[i] = 0;
+    // }
+    // MPI_Gather(C, N*N/p , MPI_INT, global_C , N*N/p , MPI_INT, 0, MPI_COMM_WORLD);
 
-    if (pf == 1) {
-        if(rank == 0){
-            print_matrix_all(mat_A, mat_B, global_C, out_file, N, N);
-        }
-    }
+    // if (pf == 1) {
+    //     if(rank == 0){
+    //         print_matrix_all(mat_A, mat_B, global_C, out_file, N, N);
+    //     }
+    // }
     MPI_Finalize();
     return 0;
 } 
