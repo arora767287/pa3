@@ -428,7 +428,7 @@ int main(int argc, char** argv) {
     for (int iter = 0; iter < p; iter++) {
 
         // mat_mul_bonus(A, tranB, C, N, p);
-        mat_mul_naive(A, tranB, C, N, p);
+        mat_mul_dot_product(A, tranB, C, N, p);
 
         int send = tranB.size();
         int recv;
@@ -447,17 +447,17 @@ int main(int argc, char** argv) {
         cout << "Time: " <<time_taken << endl;
     }
 
-    int* global_C = new int[N*N];
-    for (int i = 0; i < N*N; i++) {
-        global_C[i] = 0;
-    }
-    MPI_Gather(C, N*N/p , MPI_INT, global_C , N*N/p , MPI_INT, 0, MPI_COMM_WORLD);
+    // int* global_C = new int[N*N];
+    // for (int i = 0; i < N*N; i++) {
+    //     global_C[i] = 0;
+    // }
+    // MPI_Gather(C, N*N/p , MPI_INT, global_C , N*N/p , MPI_INT, 0, MPI_COMM_WORLD);
 
-    if (pf == 1) {
-        if(rank == 0){
-            print_matrix_all(mat_A, mat_B, global_C, out_file, N, N);
-        }
-    }
+    // if (pf == 1) {
+    //     if(rank == 0){
+    //         print_matrix_all(mat_A, mat_B, global_C, out_file, N, N);
+    //     }
+    // }
     MPI_Finalize();
     return 0;
 } 

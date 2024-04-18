@@ -53,7 +53,7 @@ runhpcsecond2:
 
 runhpc:
 	make runhpcfirst ; \
-	make runhpcsecond2 ; \
-	make runhpcsecond4 ; \
-	make runhpcsecond8 ; \
 	make runhpcsecond16 ; \
+	make runhpcsecond8 ; \
+	make runhpcsecond4 ; \
+	make runhpcsecond2 ; \
