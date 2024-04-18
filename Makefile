@@ -20,27 +20,40 @@ pacerun:
 	srun -n $(np) ./spmat $(n) $(s) $(pf) $(out)
 
 runhpcfirst:
-	@/bin/bash -c 'number=16 ; while [[ $$number -le 512 ]] ; do \
-		echo ; \
-		echo $$number ; \
-               	echo ; \
-		srun -n 8 ./transpose matrix.txt transpose.txt h $$number; \
-		((number = number + 16)) ; \
-	done' &> log_8h.txt
+	srun -n 16 ./spmat 1000 0.01 0 sparse_out ;
+	&> runhpcfirst.txt
+	srun -n 16 ./spmat 2000 0.01 0 sparse_out ;
+	&> runhpcfirst.txt
+	srun -n 16 ./spmat 3000 0.01 0 sparse_out ;
+	&> runhpcfirst.txt
 
-runhpcsecond:
-	@/bin/bash -c 'number=16 ; while [[ $$number -le 512 ]] ; do \
-		echo ; \
-		echo $$number ; \
-		echo ; \
-		srun -n 16 ./transpose matrix.txt transpose.txt m $$number; \
-		((number = number + 16)) ; \
-	done' &> log_16d.txt
+runhpcsecond16:
+	srun -n 16 ./spmat 10000 0.1 0 sparse_out ;
+	srun -n 16 ./spmat 10000 0.01 0 sparse_out ;
+	srun -n 16 ./spmat 10000 0.001 0 sparse_out ;
+	&> runhpcsecond16.txt
+
+runhpcsecond8:
+	srun -n 8 ./spmat 10000 0.1 0 sparse_out ;
+	srun -n 8 ./spmat 10000 0.01 0 sparse_out ;
+	srun -n 8 ./spmat 10000 0.001 0 sparse_out ;
+	&> runhpcsecond8.txt
+
+runhpcsecond4:
+	srun -n 4 ./spmat 10000 0.1 0 sparse_out ;
+	srun -n 4 ./spmat 10000 0.01 0 sparse_out ;
+	srun -n 4 ./spmat 10000 0.001 0 sparse_out ;
+	&> runhpcsecond4.txt
+
+runhpcsecond2:
+	srun -n 2 ./spmat 10000 0.1 0 sparse_out ;
+	srun -n 2 ./spmat 10000 0.01 0 sparse_out ;
+	srun -n 2 ./spmat 10000 0.001 0 sparse_out ;
+	&> runhpcsecond2.txt
 
 runhpc:
-	make runhpc8a ; \
-	make runhpc8h ; \
-	make runhpc8d ; \
-	make runhpc16a ; \
-	make runhpc16h ; \
-	make runhpc16d ; \
+	make runhpcfirst ; \
+	make runhpcsecond2 ; \
+	make runhpcsecond4 ; \
+	make runhpcsecond8 ; \
+	make runhpcsecond16 ; \

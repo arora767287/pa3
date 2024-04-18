@@ -433,8 +433,11 @@ int main(int argc, char** argv) {
 
     // printCSRForm(tranB);
     // printf("\n");
-    printCSRMatrix(tranB, N/p, N);
-    printf("\n");
+    if(rank == 0){
+        printCSRMatrix(tranB, N/p, N);
+        printf("\n");
+        printCSRForm(tranB);
+    }
 
     // int* mat_A = gather_and_return_CSR_matrix(B, N, p, rank);
 
