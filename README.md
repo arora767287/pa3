@@ -1,4 +1,4 @@
-\section{Theoretical Analysis}
+Theoretical Analysis
 The program runs as below:
 \begin{enumerate}
     \item Each processor is in charge of $\frac{N}{p}$ rows, so each one generates $\frac{sN^2}{p}$ elements for matrix $A$ and $\frac{sN^2}{p}$ for matrix $B$. This block distributes the rows of $A$ and $B$ among the processors.
