@@ -65,7 +65,7 @@ CSR convertToCSC(const CSR& csr) {
     return csc;
 }
 
-CSR convertToCSC(const std::vector<Point>& points, int num_cols) {
+CSR convertToCSC(const std::vector<Point>& points, int num_cols, int r) {
         CSR csc;
     if (points.empty() || num_cols <= 0) {
         return csc;
@@ -127,41 +127,53 @@ bool pointComparator(const Point& a, const Point& b) {
     return a.c < b.c;
 }
 
-CSR convertToCSC(const std::vector<Point>& points) {
+CSR convertToCSC(const std::vector<Point>& points, int cols) {
     CSR csc;
     if (points.empty()) {
         return csc;
+    }
+
+    // Determine the number of columns
+    int maxCol = 0;
+    for (const auto& point : points) {
+        if (point.c > maxCol) {
+            maxCol = point.c;
+        }
     }
 
     // Sort points by column index, and then row index
     std::vector<Point> sortedPoints = points;
     std::sort(sortedPoints.begin(), sortedPoints.end(), pointComparator);
 
-    // Initialize column pointers; add 0 as the start of the first column
-    // csc.cols.push_back(0);
+    // Initialize column pointers
+    csc.cols.resize(cols + 1, 0); // +2 to include the past-the-end index for the last column
 
-    int currentColumn = -1;
-    for (const Point& p : sortedPoints) {
-        // When we reach a new column, update the cols vector
-        while (currentColumn < p.c) {
-            csc.cols.push_back(csc.rows.size());
-            currentColumn++;
+    // Process each point to fill rows and vals
+    for (const auto& point : sortedPoints) {
+        if (point.c >= csc.cols.size()) {
+            csc.cols.resize(point.c + 1, 0);
         }
-        // Add the row index and value to the rows and vals vectors
-        csc.rows.push_back(p.r);
-        csc.vals.push_back(p.v);
+        csc.rows.push_back(point.r);
+        csc.vals.push_back(point.v);
     }
 
-    // Ensure that cols is correctly sized for all columns, even empty ones, up to max column index
-    while (currentColumn < sortedPoints.back().c + 1) {
-        csc.cols.push_back(csc.rows.size());
-        currentColumn++;
+    // Create column pointers in 'cols'
+    int currentColumn = -1;
+    for (size_t i = 0; i < sortedPoints.size(); ++i) {
+        while (currentColumn < sortedPoints[i].c) {
+            currentColumn++;
+            csc.cols[currentColumn] = i;
+        }
     }
+    csc.cols[currentColumn + 1] = sortedPoints.size(); // set the past-the-end index for the last column
 
+    // Fill the remaining columns' pointers if any
+    for (int i = currentColumn + 2; i <= cols; i++) {
+        csc.cols[i] = sortedPoints.size();
+    }
     vector<int> temp = csc.rows;
     csc.rows = csc.cols;
     csc.cols = temp;
-
     return csc;
 }
 
@@ -606,7 +618,7 @@ CSR transpose_csr_matrix(CSR& curr_matrix, int N, int p, MPI_Comm comm) {
     // }
 
     CSR result = convertToCSR(points, N/p);
-    CSR cscresult = convertToCSC(points);
+    CSR cscresult = convertToCSC(points, N);
     // if(rank == 0){
     //     printf("\n");
     //     printCSRForm(result);
@@ -848,39 +860,37 @@ void mat_mul_dot_product_csr(const vector<int>& a_row, const vector<int>& a_col,
 }
 
 void mat_mul_csr(const CSR& A, const CSR& B, int* C, int rowsA, int rowsB, int N, int iter, int rank) {
-    // if(rank == 0){
+    // std::memset(C, 0, rowsA * N * sizeof(int));  // Clearing result matrix C
+    // if(rank == 3){
+    //     printCSRForm(A);
+    //     printf("\n");
     //     printCSRForm(B);
     //     printf("\n");
     // }
-    // CSR new_B = convertToCSC(B);
 
-    for (int i = 0; i < rowsA; ++i) {
-        for (int j = A.rows[i]; j < A.rows[i+1]; ++j) {
-            int a_col_idx = A.cols[j]; // Column index of non-zero element in matrix A
-            int a_val_ij = A.vals[j];  // Value of non-zero element in matrix A
-            // printf("%d to %d comes from %d to %d \n", a_col_idx, a_col_idx + 1, B.rows[a_col_idx], B.rows[a_col_idx + 1]);
-            for (int k = B.rows[a_col_idx]; k < B.rows[a_col_idx + 1]; ++k) {
-                int b_col_idx = B.cols[k]; // Column index of non-zero element in matrix B
-                int b_val_ik = B.vals[k];  // Value of non-zero element in matrix B
-                // Update the corresponding element of the result matrix c
-                // int idx = ((i % (rowsA))*N) + (B.cols[k]);
-                int idx = ((i % (rowsA))*N) + (B.cols[k]);
-                // int idx = ((i * N) + (B.cols[k]));
-                // if((idx >= N*rowsA || idx < 0) && rank == 0){
-                //     printf("%d\n", B.cols[k]);
-                //     // printf("%d \n", idx);
+    for (int i = 0; i < rowsA; ++i) {  // Iterate over rows of A
+        for (int j = A.rows[i]; j < A.rows[i + 1]; ++j) {  // Non-zeros in row i of A
+            int a_col = A.cols[j];
+            int a_val = A.vals[j];
+
+            // if (rank == 3) {  // Debugging output for first process
+            //     printf("Processing row %d, col %d with value %d\n", i, a_col, a_val);
+            // }
+
+            for (int k = B.rows[a_col]; k < B.rows[a_col + 1]; ++k) {
+                int b_col = B.cols[k];
+                int b_val = B.vals[k];
+                C[i * N + b_col] += a_val * b_val;
+
+                // if (rank == 3) {  // More debugging output
+                //     printf("Multiplying A[%d][%d]=%d by B[%d][%d]=%d, adding to C[%d][%d]\n",
+                //            i, a_col, a_val, a_col, b_col, b_val, i, b_col);
                 // }
-                C[idx] += a_val_ij * b_val_ik; 
-
-            }        
+            }
         }
     }
-    if(rank == 0){
-        printf("Result: \n");
-        printMatrix(C, rowsA, N);
-        printf("\n");
-    }
 }
+
 
 // void mat_mul_csr(const CSR& A, const CSR& B, int* C, int rowsA, int rowsB, int N, int iter, int rank) {
 //     std::memset(C, 0, rowsA * rowsB * sizeof(int));
@@ -1073,13 +1083,12 @@ int main(int argc, char** argv) {
 
     int src, dst;
     MPI_Cart_shift(comm, 0, 1, &src, &dst);
-
-    tranB = transpose_csr_matrix(B, N, p, comm);
     
     double start_time;
     if (rank == 0) {
         start_time = MPI_Wtime();
     }
+    tranB = transpose_csr_matrix(B, N, p, comm);
 
     CSR new_tranB;
 
@@ -1109,6 +1118,8 @@ int main(int argc, char** argv) {
 
 
         tranB = new_tranB; 
+
+        MPI_Barrier(comm);
 
     }
 
