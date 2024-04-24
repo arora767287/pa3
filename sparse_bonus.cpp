@@ -476,7 +476,7 @@ int main(int argc, char** argv) {
 
     if (pf == 1) {
         if(rank == 0){
-            printMatrix(mat_mul_serial(mat_A, mat_A, N), N, N);
+            printMatrix(mat_mul_serial(mat_A, mat_B, N), N, N);
             print_matrix_all(mat_A, mat_B, global_C, out_file, N, N);
         }
     }
