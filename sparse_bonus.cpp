@@ -143,24 +143,24 @@ void deserializeCSR(const std::vector<uint64_t>& buffer, CSR& matrix) {
 uint64_t* gather_and_assemble_CSR(int N,uint64_t p,uint64_t rank, const CSR& local_csr) {
     std::vector<uint64_t> serialized_data;
     serializeCSR(local_csr, serialized_data);
-    uint64_t local_size = serialized_data.size();
+    int local_size = serialized_data.size();
 
     std::vector<int> all_sizes(p);
     MPI_Gather(&local_size, 1, MPI_INT, all_sizes.data(), 1, MPI_INT, 0, MPI_COMM_WORLD);
 
     std::vector<int> displacements;
-   uint64_t total_size = 0;
-    if (rank == 0) {
-        displacements.resize(p);
-        for (int i = 0; i < p; ++i) {
-            displacements[i] = total_size;
-            total_size += all_sizes[i];
+    uint64_t total_size = 0;
+        if (rank == 0) {
+            displacements.resize(p);
+            for (int i = 0; i < p; ++i) {
+                displacements[i] = total_size;
+                total_size += all_sizes[i];
+            }
         }
-    }
 
     std::vector<uint64_t> all_data(total_size);
-    MPI_Gatherv(serialized_data.data(), local_size, MPI_INT,
-                all_data.data(), all_sizes.data(), displacements.data(), MPI_INT, 0, MPI_COMM_WORLD);
+    MPI_Gatherv(serialized_data.data(), local_size, MPI_UINT64_T,
+                all_data.data(), all_sizes.data(), displacements.data(), MPI_UINT64_T, 0, MPI_COMM_WORLD);
 
     uint64_t* full_matrix = nullptr;
     if (rank == 0) {
@@ -170,13 +170,12 @@ uint64_t* gather_and_assemble_CSR(int N,uint64_t p,uint64_t rank, const CSR& loc
             CSR temp_csr;
             std::vector<uint64_t> temp_buffer(all_data.begin() + displacements[proc], all_data.begin() + displacements[proc] + all_sizes[proc]);
             deserializeCSR(temp_buffer, temp_csr);
-
-           uint64_t start_row = proc * (N/p);
+            uint64_t start_row = proc * (N/p);
             for (size_t r = 0; r < temp_csr.rows.size() - 1; ++r) {
                 for (int idx = temp_csr.rows[r]; idx < temp_csr.rows[r + 1]; ++idx) {
                    uint64_t col = temp_csr.cols[idx];
                    uint64_t val = temp_csr.vals[idx];
-                    full_matrix[((start_row + r) % N) * N + col] = val;
+                   full_matrix[((start_row + r) % N) * N + col] = val;
                 }
             }
         }
@@ -244,7 +243,7 @@ void generate_sparse_bonus_T(float s,uint64_t N,uint64_t p,uint64_t rank,uint64_
 
 MPI_Datatype create_mpi_csr_type() {
     MPI_Datatype csr_type;
-    MPI_Type_contiguous(2, MPI_INT, &csr_type);
+    MPI_Type_contiguous(2, MPI_UINT64_T, &csr_type);
     MPI_Type_commit(&csr_type);
     return csr_type;
 }
@@ -336,10 +335,25 @@ void print_matrix_all(uint64_t* matrix, uint64_t* matrix2, uint64_t* matrix3, ch
     FILE * fp = fopen(outfile, "w");
     for(int i = 0; i < dim1; i++){
         for(int j = 0; j < dim2; j++){
-            fprintf(fp, "%llu  ", matrix[i*dim2 + j]);
+            fprintf(fp, "%llu ", matrix[i*dim2 + j]);
         }
         fprintf(fp, "\n");
     }
+    fprintf(fp, "\n");
+    for(int i = 0; i < dim1; i++){
+        for(int j = 0; j < dim2; j++){
+            fprintf(fp, "%llu ", matrix2[i*dim2 + j]);
+        }
+        fprintf(fp, "\n");
+    }
+    fprintf(fp, "\n");
+    for(int i = 0; i < dim1; i++){
+        for(int j = 0; j < dim2; j++){
+            fprintf(fp, "%llu ", matrix3[i*dim2 + j]);
+        }
+        fprintf(fp, "\n");
+    }
+    fprintf(fp, "\n");
 }
 
 void printMatrix(uint64_t* matrix,uint64_t rows,uint64_t cols) {
@@ -415,57 +429,57 @@ int main(int argc, char** argv) {
     uint64_t* mat_A = gather_and_assemble_CSR(N, p, rank, A);
     uint64_t* mat_B = gather_and_assemble_CSR(N, p, rank, B);
 
-    // int src, dst;
-    // MPI_Cart_shift(comm, 0, 1, &src, &dst);
+    int src, dst;
+    MPI_Cart_shift(comm, 0, 1, &src, &dst);
     
-    // double start_time;
-    // if (rank == 0) {
-    //     start_time = MPI_Wtime();
-    // }
-    // tranB = transpose_csr_matrix(B, N, p, comm);
+    double start_time;
+    if (rank == 0) {
+        start_time = MPI_Wtime();
+    }
+    tranB = transpose_csr_matrix(B, N, p, comm);
 
-    // CSR new_tranB;
+    CSR new_tranB;
 
-    // for (int iter = 0; iter < p; iter++) {
-    //     // mat_mul_csr(A, tranB, C, N/p, N/p, N, iter, rank);
+    for (int iter = 0; iter < p; iter++) {
+        mat_mul_csr(A, tranB, C, N/p, N/p, N, iter, rank);
 
-    //     vector<uint64_t> send_buffer;
-    //     serializeCSR(tranB, send_buffer);
-    //     uint64_t send_size = send_buffer.size();
+        vector<uint64_t> send_buffer;
+        serializeCSR(tranB, send_buffer);
+        int send_size = send_buffer.size();
 
-    //     uint64_t recv_size;
-    //     MPI_Sendrecv(&send_size, 1, MPI_INT, dst, 0, &recv_size, 1, MPI_INT, src, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        int recv_size;
+        MPI_Sendrecv(&send_size, 1, MPI_INT, dst, 0, &recv_size, 1, MPI_INT, src, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
-    //     vector<uint64_t> recv_buffer(recv_size);
-    //     MPI_Sendrecv(send_buffer.data(), send_size, MPI_INT, dst, 0, recv_buffer.data(), recv_size, MPI_INT, src, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        vector<uint64_t> recv_buffer(recv_size);
+        MPI_Sendrecv(send_buffer.data(), send_size, MPI_UINT64_T, dst, 0, recv_buffer.data(), recv_size, MPI_UINT64_T, src, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
-    //     deserializeCSR(recv_buffer, new_tranB);
+        deserializeCSR(recv_buffer, new_tranB);
 
-    //     tranB = new_tranB; 
+        tranB = new_tranB; 
 
-    //     MPI_Barrier(comm);
-    // }
+        MPI_Barrier(comm);
+    }
 
-    // double end_time;
+    double end_time;
 
-    // if (rank == 0) {
-    //     end_time = MPI_Wtime();
-    //     double time_taken = end_time - start_time;
-    //     cout << "Time: " <<time_taken << endl;
-    // }
+    if (rank == 0) {
+        end_time = MPI_Wtime();
+        double time_taken = end_time - start_time;
+        cout << "Time: " <<time_taken << endl;
+    }
 
-    // uint64_t* global_C = new uint64_t[N*N];
-    // for (int i = 0; i < N*N; i++) {
-    //     global_C[i] = 0;
-    // }
-    // MPI_Gather(C, N*N/p , MPI_UINT64_T, global_C , N*N/p , MPI_UINT64_T, 0, MPI_COMM_WORLD);
+    uint64_t* global_C = new uint64_t[N*N];
+    for (int i = 0; i < N*N; i++) {
+        global_C[i] = 0;
+    }
+    MPI_Gather(C, N*N/p , MPI_UINT64_T, global_C , N*N/p , MPI_UINT64_T, 0, MPI_COMM_WORLD);
 
-    // if (pf == 1) {
-    //     if(rank == 0){
-    //         printMatrix(mat_mul_serial(mat_A, mat_A, N), N, N);
-    //         print_matrix_all(mat_A, mat_B, global_C, out_file, N, N);
-    //     }
-    // }
+    if (pf == 1) {
+        if(rank == 0){
+            printMatrix(mat_mul_serial(mat_A, mat_A, N), N, N);
+            print_matrix_all(mat_A, mat_B, global_C, out_file, N, N);
+        }
+    }
     MPI_Finalize();
     return 0;
 } 
