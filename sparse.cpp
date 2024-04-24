@@ -7,7 +7,6 @@
 #include <vector>
 #include <algorithm>
 #include <cstdint>
-#include <inttypes.h> // Include for PRIu64 macro
 
 using namespace std;
 
@@ -37,7 +36,7 @@ vector<Point> generate_sparse(float s,uint64_t N,uint64_t p,uint64_t rank,uint64
            uint64_t randd = rand() % N;
            
             if (randd < s * N) {
-                uint64_t rand_value = static_cast<uint64_t>(rand()  % 10);
+                uint64_t rand_value = static_cast<uint64_t>(rand() + 1);
                 Point point = {r, c, rand_value};
                 m.push_back(point);
                 count += 1;
@@ -47,34 +46,29 @@ vector<Point> generate_sparse(float s,uint64_t N,uint64_t p,uint64_t rank,uint64
     return m;
 }
 
-void print_matrix_all(uint64_t* matrix, uint64_t* matrix2, uint64_t* matrix3, char* outfile, int dim1, int dim2) {
-    FILE* fp = fopen(outfile, "w");
-
-    for (int i = 0; i < dim1; i++) {
-        for (int j = 0; j < dim2; j++) {
-            fprintf(fp, "%" PRIu64 " ", matrix[i * dim2 + j]);
+void print_matrix_all(uint64_t* matrix, uint64_t* matrix2, uint64_t* matrix3, char* outfile,uint64_t dim1,uint64_t dim2){
+    FILE * fp = fopen(outfile, "w");
+    for(int i = 0; i < dim1; i++){
+        for(int j = 0; j < dim2; j++){
+            fprintf(fp, "%llu", matrix[i*dim2 + j]);
         }
         fprintf(fp, "\n");
     }
     fprintf(fp, "\n");
-
-    for (int i = 0; i < dim1; i++) {
-        for (int j = 0; j < dim2; j++) {
-            fprintf(fp, "%" PRIu64 " ", matrix2[i * dim2 + j]);
+    for(int i = 0; i < dim1; i++){
+        for(int j = 0; j < dim2; j++){
+            fprintf(fp, "%llu ", matrix2[i*dim2 + j]);
         }
         fprintf(fp, "\n");
     }
     fprintf(fp, "\n");
-
-    for (int i = 0; i < dim1; i++) {
-        for (int j = 0; j < dim2; j++) {
-            fprintf(fp, "%" PRIu64 " ", matrix3[i * dim2 + j]);
+    for(int i = 0; i < dim1; i++){
+        for(int j = 0; j < dim2; j++){
+            fprintf(fp, "%llu ", matrix3[i*dim2 + j]);
         }
         fprintf(fp, "\n");
     }
     fprintf(fp, "\n");
-
-    fclose(fp);
 }
 
 MPI_Datatype create_point_type() {
@@ -86,7 +80,7 @@ MPI_Datatype create_point_type() {
     disp[1] = offsetof(Point, c);
     disp[2] = offsetof(Point, v);
 
-    MPI_Datatype part_types[3] = {MPI_UINT64_T, MPI_UINT64_T, MPI_UINT64_T };
+    MPI_Datatype part_types[3] = {MPI_UINT64_T, MPI_UINT64_T, MPI_UINT64_T};
 
     MPI_Type_create_struct(3, parts, disp, part_types, &point);
     MPI_Type_commit(&point);
@@ -106,7 +100,7 @@ vector<Point> transpose_matrix(std::vector<Point>& matrix,uint64_t N,uint64_t p)
         sdispls[i] = sdispls[i - 1] + sendcounts[i - 1];
     }
 
-    MPI_Alltoall(sendcounts.data(), 1, MPI_UINT64_T, recvcounts.data(), 1, MPI_UINT64_T, MPI_COMM_WORLD);
+    MPI_Alltoall(sendcounts.data(), 1, MPI_INT, recvcounts.data(), 1, MPI_INT, MPI_COMM_WORLD);
 
     rdispls[0] = 0;
    uint64_t recv_buffer_size = recvcounts[0];
@@ -127,7 +121,7 @@ uint64_t* gather_and_return_matrix(const std::vector<Point>& curr_matrix,uint64_
 
    uint64_t curr_size = curr_matrix.size();
     std::vector<int> sizes(p);
-    MPI_Gather(&curr_size, 1, MPI_UINT64_T, sizes.data(), 1, MPI_UINT64_T, 0, MPI_COMM_WORLD);
+    MPI_Gather(&curr_size, 1, MPI_INT, sizes.data(), 1, MPI_INT, 0, MPI_COMM_WORLD);
 
     std::vector<int> displs(p, 0);
     if (rank == 0) {
@@ -238,7 +232,7 @@ int main(int argc, char** argv) {
 
        uint64_t send = tranB.size();
        uint64_t recv;
-        MPI_Sendrecv(&send, 1, MPI_UINT64_T, dst, 0, &recv, 1, MPI_UINT64_T, src, 0, comm, MPI_STATUS_IGNORE);
+        MPI_Sendrecv(&send, 1, MPI_INT, dst, 0, &recv, 1, MPI_INT, src, 0, comm, MPI_STATUS_IGNORE);
         vector<Point> rec_buffer(recv);
         MPI_Sendrecv(tranB.data(), send, point_type, dst, 0, rec_buffer.data(), recv, point_type, src, 0, comm, MPI_STATUS_IGNORE);
         tranB.resize(recv);
@@ -257,7 +251,7 @@ int main(int argc, char** argv) {
     for (int i = 0; i < N*N; i++) {
         global_C[i] = 0;
     }
-    MPI_Gather(C, N*N/p , MPI_UINT64_T, global_C , N*N/p , MPI_UINT64_T, 0, MPI_COMM_WORLD);
+    MPI_Gather(C, N*N/p , MPI_INT, global_C , N*N/p , MPI_INT, 0, MPI_COMM_WORLD);
 
     if (pf == 1) {
         if(rank == 0){
