@@ -365,16 +365,23 @@ void printMatrix(uint64_t* matrix,uint64_t rows,uint64_t cols) {
     }
 }
 
-void mat_mul_csr(const CSR& A, const CSR& B, uint64_t* C,uint64_t rowsA,uint64_t rowsB,uint64_t N,uint64_t iter,uint64_t rank) {
-    for (int i = 0; i < rowsA; ++i) {  // Iterate over rows of A
-        for (int j = A.rows[i]; j < A.rows[i + 1]; ++j) {  // Non-zeros in row i of A
-           uint64_t a_col = A.cols[j];
-           uint64_t a_val = A.vals[j];
-            for (int k = B.rows[a_col]; k < B.rows[a_col + 1]; ++k) {
-               uint64_t b_col = B.cols[k];
-               uint64_t b_val = B.vals[k];
-                C[i * N + b_col] += a_val * b_val;
+void mat_mul_csr(const CSR& A, const CSR& B, uint64_t* C, uint64_t rowsA, uint64_t colsB, uint64_t N, uint64_t iter, uint64_t rank) {
+    for (uint64_t i = 0; i < rowsA; ++i) {
+        for (uint64_t j = 0; j < colsB; ++j) {
+            uint64_t sum = 0;
+            for (uint64_t k = A.rows[i]; k < A.rows[i + 1]; ++k) {
+                uint64_t a_col = A.cols[k];
+                uint64_t a_val = A.vals[k];
+                for (uint64_t l = B.rows[j]; l < B.rows[j + 1]; ++l) {
+                    uint64_t b_row = B.cols[l];
+                    if (b_row == a_col) {
+                        uint64_t b_val = B.vals[l];
+                        sum += a_val * b_val;
+                        break;
+                    }
+                }
             }
+            C[i * N + j] += sum;
         }
     }
 }
@@ -472,6 +479,7 @@ int main(int argc, char** argv) {
     for (int i = 0; i < N*N; i++) {
         global_C[i] = 0;
     }
+
     MPI_Gather(C, N*N/p , MPI_UINT64_T, global_C , N*N/p , MPI_UINT64_T, 0, MPI_COMM_WORLD);
 
     if (pf == 1) {
